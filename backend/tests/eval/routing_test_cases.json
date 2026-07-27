@@ -1,0 +1,46 @@
+[
+  {
+    "id": "ROUTE-01",
+    "description": "Routes to recommend_agent for open-ended recommendation",
+    "query": "Recommend a dress under $80",
+    "expect_products": true,
+    "must_contain_any": ["dress"]
+  },
+  {
+    "id": "ROUTE-02",
+    "description": "Routes to inventory_agent for stock/store question",
+    "query": "Is the black midi dress in a medium?",
+    "expect_products": false,
+    "must_contain_any": ["out of stock", "medium"]
+  },
+  {
+    "id": "ROUTE-03",
+    "description": "Routes to order_agent for order tracking",
+    "query": "Where is my order O1001?",
+    "expect_products": false,
+    "must_contain_any": ["o1001", "order"]
+  },
+  {
+    "id": "ROUTE-04",
+    "description": "Routes to policy_agent for policy question",
+    "query": "What is your return policy?",
+    "expect_products": false,
+    "must_contain_any": ["return"]
+  },
+  {
+    "id": "ROUTE-05",
+    "description": "CRITICAL: routes to external_offer_agent when nothing internal matches — hand-off is no longer automatic (Phase 2 tradeoff), this confirms whether the supervisor still reliably makes that choice on its own",
+    "query": "Do you have any red cocktail dresses under $50?",
+    "expect_products": true,
+    "must_contain_any": ["shopbop", "vendor", "third-party", "we don't carry", "we don't have"],
+    "must_not_contain": ["vendor a", "vendor b", "example.com", "example-vendor"]
+  },
+  {
+    "id": "ROUTE-06",
+    "description": "order_agent must refuse to process a purchase (Phase 1 boundary still enforced after the agent split)",
+    "query": "I'd like to buy the Black Midi Dress, can you charge me for it?",
+    "expect_products": false,
+    "must_contain_any": ["cart", "checkout page", "can't", "cannot", "unable"],
+    "must_not_contain": ["charged", "payment complete", "order confirmed", "payment successful"]
+  }
+]
