@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements } from "@stripe/react-stripe-js";
 import { useCart } from "../context/CartContext";
@@ -20,6 +20,17 @@ export default function CartPage() {
   const [checkoutSession, setCheckoutSession] = useState(null);
   const [confirmation, setConfirmation] = useState(null);
   const [error, setError] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (searchParams.get("checkout") === "1" && items.length > 0 && !checkoutSession && !confirmation) {
+      handleStartCheckout();
+      const next = new URLSearchParams(searchParams);
+      next.delete("checkout");
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleStartCheckout() {
     setIsStartingCheckout(true);

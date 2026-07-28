@@ -57,14 +57,14 @@ function cartReducer(state, action) {
 export function CartProvider({ children }) {
   const [state, dispatch] = useReducer(cartReducer, undefined, loadInitialState);
 
-  // Tracks the most recently added item (authoritative backend response)
-  // so a toast/mini-cart can react to it.
   const [lastAdded, setLastAdded] = useState(null);
   const [notifyId, setNotifyId] = useState(0);
 
-  // Prevents duplicate simultaneous add requests for the same product —
-  // e.g. a user double-clicking "Add to cart" before the first request
-  // has resolved.
+  // The element that was focused (e.g. the "Add to cart" button clicked)
+  // right before addToCart was called. Captured synchronously so the
+  // CartToast can return keyboard focus there when it closes.
+  const triggerElementRef = useRef(null);
+
   const pendingProductIds = useRef(new Set());
 
   useEffect(() => {
@@ -75,20 +75,16 @@ export function CartProvider({ children }) {
     }
   }, [state]);
 
-  /**
-   * Calls the authoritative /cart/add endpoint rather than trusting the
-   * product object passed in by the caller. The backend validates real
-   * stock and returns the true price (including any active promotion) —
-   * that response, not the input, is what gets stored in the cart.
-   */
   const addToCart = async (product, quantity = 1) => {
     const productId = product.product_id;
 
     if (pendingProductIds.current.has(productId)) {
-      // A request for this exact product is already in flight — ignore
-      // this duplicate call rather than firing a second request.
       return;
     }
+
+    // Capture the currently focused element synchronously, before any
+    // await — this is reliably the button the user just clicked.
+    triggerElementRef.current = document.activeElement;
 
     pendingProductIds.current.add(productId);
     try {
@@ -106,6 +102,8 @@ export function CartProvider({ children }) {
         price: result.unit_price,
         promotion: result.promotion,
         quantity: result.quantity,
+        // size is intentionally omitted — no variant-selection UI exists
+        // yet, so we never invent one here.
       };
 
       dispatch({ type: "ADD_ITEM", item });
@@ -134,6 +132,7 @@ export function CartProvider({ children }) {
     total,
     lastAdded,
     notifyId,
+    triggerElementRef,
   };
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
