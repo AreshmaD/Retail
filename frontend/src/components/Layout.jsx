@@ -7,7 +7,7 @@ import ChatWidget from "./ChatWidget";
 import CartToast from "./CartToast";
 import "./Layout.css";
 
-const CATEGORIES = ["Dresses", "Shoes", "Outerwear", "Tops", "Bottoms", "Accessories"];
+const CATEGORIES = ["Dresses", "Shoes", "Outerwear", "Tops", "Bottoms", "Accessories", "Sale"];
 
 function ChatIcon() {
   return (
@@ -40,6 +40,36 @@ function CartIcon() {
       <circle cx="9" cy="21" r="1" />
       <circle cx="19" cy="21" r="1" />
       <path d="M2.5 3h2l2.6 12.4a2 2 0 0 0 2 1.6h8.4a2 2 0 0 0 2-1.6L21 8H6" />
+    </svg>
+  );
+}
+
+// New: concise line icons for the trust-badge row
+function TruckIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="6" width="14" height="11" rx="1" />
+      <path d="M15 9h4l3 3.5V17h-7z" />
+      <circle cx="6" cy="19" r="1.6" />
+      <circle cx="17.5" cy="19" r="1.6" />
+    </svg>
+  );
+}
+
+function ReturnIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9a9 9 0 1 1 2.6 6.4" />
+      <path d="M3 4v5h5" />
+    </svg>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6z" />
+      <path d="M9.5 12l1.8 1.8L14.8 10" />
     </svg>
   );
 }
@@ -146,24 +176,54 @@ export default function Layout() {
       </header>
 
       <nav className="layout-nav">
-        <Link
-          to="/"
-          className={`layout-nav-link ${isCategoryActive("/") ? "layout-nav-link--active" : ""}`}
-        >
-          All
-        </Link>
-        {CATEGORIES.map((cat) => {
-          const path = `/category/${cat.toLowerCase()}`;
-          return (
-            <Link
-              key={cat}
-              to={path}
-              className={`layout-nav-link ${isCategoryActive(path) ? "layout-nav-link--active" : ""}`}
-            >
-              {cat}
-            </Link>
-          );
-        })}
+        <div className="layout-nav-categories">
+          <Link
+            to="/"
+            className={`layout-nav-link ${isCategoryActive("/") ? "layout-nav-link--active" : ""}`}
+          >
+            All
+          </Link>
+          {CATEGORIES.map((cat) => {
+            const path = `/category/${cat.toLowerCase()}`;
+            const isSale = cat === "Sale";
+            const active = isCategoryActive(path);
+            const classNames = [
+              "layout-nav-link",
+              active ? "layout-nav-link--active" : "",
+              isSale ? "layout-nav-link--sale" : "",
+            ].filter(Boolean).join(" ");
+            return (
+              <Link key={cat} to={path} className={classNames}>
+                {cat}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* New: retail trust badges — static marketing copy, no backend data source */}
+        <div className="layout-trust-badges">
+          <div className="layout-trust-item">
+            <TruckIcon />
+            <span className="layout-trust-text">
+              <span className="layout-trust-label">Free shipping</span>
+              <span className="layout-trust-desc">on orders $75+</span>
+            </span>
+          </div>
+          <div className="layout-trust-item">
+            <ReturnIcon />
+            <span className="layout-trust-text">
+              <span className="layout-trust-label">Easy returns</span>
+              <span className="layout-trust-desc">30-day returns</span>
+            </span>
+          </div>
+          <div className="layout-trust-item">
+            <ShieldIcon />
+            <span className="layout-trust-text">
+              <span className="layout-trust-label">Secure checkout</span>
+              <span className="layout-trust-desc">SSL encrypted</span>
+            </span>
+          </div>
+        </div>
       </nav>
 
       <main className="layout-content">
