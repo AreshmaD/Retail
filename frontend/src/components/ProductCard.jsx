@@ -1,13 +1,10 @@
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { Link } from "react-router-dom";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 function resolveImageUrl(url) {
   if (!url) return url;
-  // Relative paths (our own generated product images) need the backend
-  // origin prefixed — absolute URLs (Picsum, external vendor images)
-  // already point to the right place and should be left alone.
   return url.startsWith("/") ? `${API_BASE}${url}` : url;
 }
 import { useCart } from "../context/CartContext";
@@ -18,12 +15,34 @@ export default function ProductCard({ product }) {
   const { addToCart } = useCart();
   const { toggleSave, isSaved } = useSavedItems();
 
+  // Add-to-cart interaction state: "idle" | "loading" | "added" | "error"
+  const [cartState, setCartState] = useState("idle");
+
   const isExternal = product.source === "external";
   const saved = isSaved(product);
+  // Respect an explicit in_stock flag from the backend if present; otherwise assume in stock
+  const inStock = product.in_stock !== false;
 
   const resolvedClickUrl = product.click_url
     ? (product.click_url.startsWith("/") ? `${API_BASE}${product.click_url}` : product.click_url)
     : "#";
+
+  async function handleAddToCart() {
+    if (cartState === "loading" || !inStock) return;
+    setCartState("loading");
+    try {
+      // addToCart is synchronous today (local cart, no API call yet).
+      // We add a short simulated delay here purely so the loading state
+      // is visible and the interaction doesn't feel instantaneous/jarring.
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      addToCart(product);
+      setCartState("added");
+      setTimeout(() => setCartState("idle"), 1800);
+    } catch (err) {
+      setCartState("error");
+      setTimeout(() => setCartState("idle"), 2200);
+    }
+  }
 
   const externalLink = createElement(
     "div",
@@ -44,6 +63,46 @@ export default function ProductCard({ product }) {
       "Affiliate link — we may earn a commission"
     )
   );
+
+  function renderCartButton() {
+    if (!inStock) {
+      return (
+        <button className="product-card-btn product-card-btn--disabled" disabled>
+          Out of stock
+        </button>
+      );
+    }
+
+    if (cartState === "loading") {
+      return (
+        <button className="product-card-btn product-card-btn--loading" disabled>
+          Adding…
+        </button>
+      );
+    }
+
+    if (cartState === "added") {
+      return (
+        <button className="product-card-btn product-card-btn--added" disabled>
+          ✓ Added to cart
+        </button>
+      );
+    }
+
+    if (cartState === "error") {
+      return (
+        <button className="product-card-btn product-card-btn--error" onClick={handleAddToCart}>
+          Failed. Try again
+        </button>
+      );
+    }
+
+    return (
+      <button className="product-card-btn" onClick={handleAddToCart}>
+        Add to cart
+      </button>
+    );
+  }
 
   return (
     <div className="product-card">
@@ -98,13 +157,7 @@ export default function ProductCard({ product }) {
           <p className="product-card-price">${product.price?.toFixed(2)}</p>
         )}
 
-        {isExternal ? (
-          externalLink
-        ) : (
-          <button className="product-card-btn" onClick={() => addToCart(product)}>
-            Add to cart
-          </button>
-        )}
+        {isExternal ? externalLink : renderCartButton()}
       </div>
     </div>
   );

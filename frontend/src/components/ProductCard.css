@@ -34,7 +34,7 @@
   background: var(--color-accent);
   color: var(--color-accent-text);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   padding: 3px 8px;
   border-radius: 10px;
 }
@@ -53,8 +53,8 @@
 }
 
 .product-card-name {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--font-size-product-title);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text);
   margin: 0 0 2px;
 }
@@ -63,7 +63,7 @@
   display: flex;
   align-items: center;
   gap: 3px;
-  font-size: 11px;
+  font-size: var(--font-size-support);
   color: var(--color-text-secondary);
   margin-bottom: 4px;
 }
@@ -73,28 +73,72 @@
 }
 
 .product-card-price {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--font-size-price);
+  font-weight: var(--font-weight-bold);
   color: var(--color-text);
   margin: 0 0 8px;
 }
 
+/* Base button — all states share this, then override below */
 .product-card-btn {
   background: var(--color-primary-light);
   color: #fff;
   border: none;
   border-radius: var(--radius-sm);
   padding: 8px 0;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--font-size-button);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
   text-align: center;
   text-decoration: none;
   display: block;
+  width: 100%;
+  transition: background var(--transition-fast), opacity var(--transition-fast);
 }
 
-.product-card-btn:hover {
+.product-card-btn:hover:not(:disabled) {
   background: var(--color-primary);
+}
+
+.product-card-btn:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.product-card-btn:disabled {
+  cursor: not-allowed;
+}
+
+/* Loading state */
+.product-card-btn--loading {
+  background: var(--color-primary-light);
+  opacity: 0.65;
+}
+
+/* Success / added state */
+.product-card-btn--added {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  opacity: 1;
+}
+
+/* Error state */
+.product-card-btn--error {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  cursor: pointer;
+}
+
+.product-card-btn--error:hover {
+  background: var(--color-error);
+  color: #fff;
+}
+
+/* Out of stock / disabled state */
+.product-card-btn--disabled {
+  background: var(--color-border);
+  color: var(--color-text-muted);
+  opacity: 1;
 }
 
 .product-card-btn--external {
@@ -116,22 +160,22 @@
   align-items: center;
   justify-content: center;
   color: var(--color-text-secondary);
+  transition: color var(--transition-fast), transform var(--transition-fast);
+}
+
+.product-card-save:hover {
+  color: #E0546B;
+  transform: scale(1.08);
+}
+
+.product-card-save:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }
 
 .product-card-save--active {
   color: #E0546B;
 }
-
-
-
-
-
-
-
-
-
-
-
 
 .product-card-name-link {
   text-decoration: none;
@@ -150,7 +194,7 @@
 }
 
 .product-card-price--original {
-  font-size: 12px;
+  font-size: var(--font-size-support);
   color: var(--color-text-muted);
   text-decoration: line-through;
   font-weight: 400;
@@ -158,14 +202,14 @@
 }
 
 .product-card-price--sale {
-  font-size: 15px;
-  font-weight: 700;
-  color: #C8102E;
+  font-size: var(--font-size-price);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-sale);
   margin: 0;
 }
 
 .product-card-promo-badge {
-  background: #C8102E;
+  background: var(--color-sale);
   color: #fff;
   font-size: 9px;
   font-weight: 700;
