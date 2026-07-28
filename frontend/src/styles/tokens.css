@@ -19,7 +19,7 @@
   --color-success-bg: #E9F7EF;
   --color-error: #D92D40;
   --color-error-bg: #FCEAEC;
-  --color-sale: #C8102E; /* matches existing hardcoded value in ProductCard.css */
+  --color-sale: #C8102E;
   --color-focus-ring: #6D4AFF;
 
   --radius-sm: 6px;
