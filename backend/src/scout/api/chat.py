@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from scout.agents.supervisor import ask, extract_products, extract_text, SPECIALIST_NAMES
+from scout.agents.supervisor import ask, ask_streaming, SPECIALIST_NAMES
 
 router = APIRouter()
 
@@ -41,50 +41,35 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
 
 @router.post("/chat/stream")
 async def chat_stream(request: Request, body: ChatRequest):
+    """Streams real progress events (understanding_request,
+    searching_products, checking_inventory, verifying_claims,
+    preparing_response) as the request genuinely moves through the
+    supervisor/specialist graph, then emits the final, verification-gated
+    reply in one 'done' event. No partial/unverified answer text is ever
+    streamed — only real progress signals plus the finished, checked
+    answer, matching the same verification pipeline the non-streaming
+    /chat endpoint uses via ask()."""
     session_id = body.session_id or str(uuid.uuid4())
     history = SESSION_HISTORIES.get(session_id, [])
-    history.append({"role": "user", "content": body.message})
 
     supervisor_app = request.app.state.supervisor_app
 
     async def event_generator():
         yield {"event": "session", "data": session_id}
 
-        full_text_parts: list[str] = []
-        final_result = None
         try:
-            async for event in supervisor_app.astream_events(
-                {"messages": history},
-                version="v2",
-                config={"recursion_limit": 10},
-            ):
-                if event.get("event") == "on_chain_end" and event.get("name") == "LangGraph":
-                    final_result = event.get("data", {}).get("output")
-
-                if event.get("event") != "on_chat_model_stream":
-                    continue
-
-                node_name = event.get("metadata", {}).get("langgraph_node", "")
-                if node_name not in SPECIALIST_NAMES:
-                    continue
-
-                chunk = event["data"]["chunk"]
-                text = extract_text(getattr(chunk, "content", ""))
-                if text:
-                    full_text_parts.append(text)
-                    yield {"event": "token", "data": text}
+            async for kind, payload in ask_streaming(supervisor_app, history, body.message):
+                if kind == "progress":
+                    yield {"event": "progress", "data": payload}
+                else:
+                    reply_text, products = payload
+                    SESSION_HISTORIES[session_id] = history
+                    yield {
+                        "event": "done",
+                        "data": json.dumps({"reply": reply_text, "products": products}),
+                    }
         except Exception as e:
             yield {"event": "error", "data": str(e)}
             return
-
-        full_reply = "".join(full_text_parts)
-        history.append({"role": "assistant", "content": full_reply})
-        SESSION_HISTORIES[session_id] = history
-
-        products = []
-        if final_result and "messages" in final_result:
-            products = extract_products(final_result["messages"])
-
-        yield {"event": "done", "data": json.dumps({"reply": full_reply, "products": products})}
 
     return EventSourceResponse(event_generator())

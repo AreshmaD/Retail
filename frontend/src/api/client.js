@@ -15,7 +15,7 @@ export async function sendChatMessage(message, sessionId = null) {
 }
 
 export async function streamChatMessage(message, sessionId, callbacks = {}) {
-  const { onSession, onToken, onDone, onError } = callbacks;
+  const { onSession, onToken, onProgress, onDone, onError } = callbacks;
 
   const response = await fetch(`${BASE_URL}/chat/stream`, {
     method: "POST",
@@ -38,17 +38,19 @@ export async function streamChatMessage(message, sessionId, callbacks = {}) {
 
     buffer += decoder.decode(value, { stream: true });
 
-    const events = buffer.split("\n\n");
+    const events = buffer.split(/\r\n\r\n|\n\n/);
     buffer = events.pop();
 
     for (const rawEvent of events) {
-      const eventMatch = rawEvent.match(/^event:\s*(.+)$/m);
-      const dataMatch = rawEvent.match(/^data:\s*(.*)$/m);
+      const eventMatch = rawEvent.match(/^event:\s*(.+?)\r?$/m);
+      const dataMatch = rawEvent.match(/^data:\s*(.*?)\r?$/m);
       const eventType = eventMatch?.[1]?.trim();
       const data = dataMatch?.[1] ?? "";
 
       if (eventType === "session") {
         onSession?.(data);
+      } else if (eventType === "progress") {
+        onProgress?.(data);
       } else if (eventType === "token") {
         onToken?.(data);
       } else if (eventType === "error") {
@@ -56,9 +58,9 @@ export async function streamChatMessage(message, sessionId, callbacks = {}) {
       } else if (eventType === "done") {
         try {
           const parsed = JSON.parse(data);
-          onDone?.(parsed.reply);
+          onDone?.(parsed.reply, parsed.products || []);
         } catch {
-          onDone?.(data);
+          onDone?.(data, []);
         }
       }
     }

@@ -3,6 +3,7 @@ from typing import Union
 from mcp.server.fastmcp import FastMCP
 
 from scout.db.session import SessionLocal
+from scout.db.models import Product
 from scout.services.product_service import search_products, check_stock, find_alternatives
 from scout.services.store_service import check_store_stock
 from scout.services.order_service import get_order
@@ -81,6 +82,50 @@ def search_external_offers(category: str = "", max_price: Union[str, float] = 0)
         session.close()
 
 
+def _filter_to_majority_category(session, candidate_ids: list[str]) -> list[str]:
+    """Semantic similarity search has no category awareness — a query
+    like "shoes for standing all day" can pull in a stray candidate from
+    an unrelated category (e.g. jeans) if its embedding happens to be
+    close enough on generic comfort/everyday language. Since the actual
+    customer request is virtually always about ONE category, this keeps
+    only candidates matching whichever category is most common among the
+    semantic results, discarding clear category outliers before ranking.
+    If candidates are already evenly split across categories (no clear
+    majority), all are kept as-is rather than guessing which is "correct".
+    """
+    if not candidate_ids:
+        return candidate_ids
+
+    products = (
+        session.query(Product)
+        .filter(Product.product_id.in_(candidate_ids))
+        .all()
+    )
+    category_by_id = {p.product_id: p.category for p in products}
+
+    category_counts: dict[str, int] = {}
+    for pid in candidate_ids:
+        cat = category_by_id.get(pid)
+        if cat:
+            category_counts[cat] = category_counts.get(cat, 0) + 1
+
+    if not category_counts:
+        return candidate_ids
+
+    majority_category = max(category_counts, key=category_counts.get)
+    majority_count = category_counts[majority_category]
+
+    # No clear majority (e.g. a tie, or results are evenly spread) — don't
+    # discard anything, since we can't confidently say what's an outlier.
+    if majority_count < len(candidate_ids) / 2:
+        return candidate_ids
+
+    return [
+        pid for pid in candidate_ids
+        if category_by_id.get(pid) == majority_category
+    ]
+
+
 @mcp.tool()
 def recommend_products(
     query: str,
@@ -96,6 +141,7 @@ def recommend_products(
     session = SessionLocal()
     try:
         candidates = semantic_search_products(query, k=10)
+        candidates = _filter_to_majority_category(session, candidates)
         target_price = _to_float(max_price) or None
         return rank_products(
             session,

@@ -143,10 +143,28 @@
 }
 
 .chat-widget-products {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 10px;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-top: 6px;
+  margin-bottom: 4px;
+  scroll-snap-type: x proximity;
+}
+
+.chat-widget-products .product-card {
+  flex: 0 0 150px;
+  scroll-snap-align: start;
+}
+
+.chat-widget-products .product-card-name {
+  font-size: 12px;
+  min-height: calc(12px * 1.3 * 2);
+}
+
+.chat-widget-products .product-card-price,
+.chat-widget-products .product-card-price--sale {
+  font-size: 14px;
 }
 
 .chat-widget-loading {
@@ -233,4 +251,189 @@
   color: var(--color-text-muted);
   margin: 0;
   line-height: 1.5;
+}
+
+/* Starter prompts (empty state only) */
+.chat-widget-starters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+  text-align: left;
+}
+
+.chat-widget-starter-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: var(--font-size-support);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.chat-widget-starter-btn svg {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+.chat-widget-starter-btn:hover:not(:disabled) {
+  background: var(--color-card-bg);
+  border-color: var(--color-primary-light);
+}
+
+.chat-widget-starter-btn:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.chat-widget-starter-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat-widget-supporting-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  background: var(--color-card-bg);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-top: 4px;
+  text-align: left;
+  line-height: 1.4;
+}
+
+.chat-widget-supporting-icon {
+  color: var(--color-primary-light);
+  flex-shrink: 0;
+}
+
+/* Real progress indicator — collapsible, shows the current step plus a
+   history of steps already completed this turn. */
+.chat-widget-progress {
+  background: var(--color-card-bg);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  width: fit-content;
+  max-width: 85%;
+}
+
+.chat-widget-progress-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: var(--font-size-support);
+  color: var(--color-text-secondary);
+}
+
+.chat-widget-progress-toggle:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.chat-widget-progress-current {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.chat-widget-progress-caret {
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.chat-widget-progress-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.chat-widget-progress-item {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  padding-left: 14px;
+  position: relative;
+}
+
+.chat-widget-progress-item::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--color-success);
+}
+
+/* Retry button (used both for a failed message and the disconnected state) */
+.chat-widget-retry-btn {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  margin: 6px 0 10px;
+}
+
+.chat-widget-retry-btn:hover {
+  background: var(--color-error);
+  color: #fff;
+}
+
+.chat-widget-retry-btn:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.chat-widget-retry-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Disconnected state */
+.chat-widget-disconnected {
+  background: var(--color-error-bg);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.chat-widget-disconnected p {
+  font-size: var(--font-size-support);
+  color: var(--color-error);
+  margin: 0 0 6px;
+}
+
+/* Mobile: full-height-ish bottom sheet instead of a floating corner panel */
+@media (max-width: 640px) {
+  .chat-widget-panel {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: 8%;
+    width: auto;
+    height: auto;
+    max-height: none;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+
+  .chat-widget-bubble {
+    bottom: 84px; /* keeps clear of mobile cart/nav controls near screen edge */
+  }
 }

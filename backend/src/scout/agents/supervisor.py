@@ -238,8 +238,16 @@ async def _run_single_intent(app, history: list[dict], sub_intent: str, debug: b
 
     reset_guard(max_total_calls=10, max_identical_calls=1)
 
+    # Track how many messages existed BEFORE this turn, so we only ever
+    # scan messages genuinely produced by THIS turn for products/replies —
+    # never the full accumulated session history. Without this, product
+    # recommendations from earlier questions in the same session (e.g.
+    # dresses asked about earlier) would keep reappearing alongside
+    # unrelated later answers (e.g. shoes).
+    messages_before = len(history)
     history.append({"role": "user", "content": sub_intent})
     result = await app.ainvoke({"messages": history}, config={"recursion_limit": 15})
+    new_messages = result["messages"][messages_before:]
 
     if debug:
         print(f"\n--- FULL MESSAGE TRACE (sub-intent: {sub_intent!r}) ---")
@@ -255,8 +263,8 @@ async def _run_single_intent(app, history: list[dict], sub_intent: str, debug: b
                 print(f"    content={text[:300]!r}")
         print("--- END TRACE ---\n")
 
-    reply_text = get_final_reply(result["messages"])
-    all_products = extract_products(result["messages"])
+    reply_text = get_final_reply(new_messages)
+    all_products = extract_products(new_messages)
 
     # If a NEEDS_EXTERNAL_CHECK hand-off happened this turn, the internal
     # products from recommend_agent's abandoned attempt are stale — the
@@ -265,7 +273,7 @@ async def _run_single_intent(app, history: list[dict], sub_intent: str, debug: b
     # near-misses and the real external results get mixed into one array.
     had_external_handoff = any(
         "NEEDS_EXTERNAL_CHECK" in extract_text(getattr(msg, "content", ""))
-        for msg in result["messages"]
+        for msg in new_messages
         if getattr(msg, "name", None) == "recommend_agent"
     )
     if had_external_handoff:
@@ -287,13 +295,15 @@ async def _run_single_intent(app, history: list[dict], sub_intent: str, debug: b
             "do not invent or restate an incorrect price."
         )
         reset_guard(max_total_calls=10, max_identical_calls=1)
+        messages_before_correction = len(history)
         history.append({"role": "user", "content": correction_note})
         correction_result = await app.ainvoke(
             {"messages": history}, config={"recursion_limit": 15}
         )
+        new_correction_messages = correction_result["messages"][messages_before_correction:]
 
-        corrected_reply = get_final_reply(correction_result["messages"])
-        corrected_products = extract_products(correction_result["messages"]) or products
+        corrected_reply = get_final_reply(new_correction_messages)
+        corrected_products = extract_products(new_correction_messages) or products
         passed_now, reason_now = verify_price_grounding(corrected_reply, corrected_products, customer_message=sub_intent)
 
         if debug:
@@ -365,3 +375,134 @@ if __name__ == "__main__":
         await tool_manager.stop()
 
     asyncio.run(_main())
+
+
+async def _run_single_intent_streaming(app, history: list[dict], sub_intent: str, debug: bool = False):
+    """Streaming-aware sibling of _run_single_intent, used only by the
+    /chat/stream endpoint. Yields ("progress", label) tuples as real
+    LangGraph node transitions occur, then yields exactly one
+    ("result", (reply_text, products)) tuple at the end — after running
+    the SAME verification + one-correction-retry gate _run_single_intent
+    uses. No partial/unverified text is ever yielded; only real progress
+    signals and the final, checked answer.
+    """
+    if not sub_intent or not sub_intent.strip():
+        yield ("result", ("I didn't quite catch that — could you rephrase your question?", []))
+        return
+
+    reset_guard(max_total_calls=10, max_identical_calls=1)
+
+    # Track how many messages existed BEFORE this turn so we only ever
+    # scan NEW messages for products/replies — never the full session
+    # history. Without this, recommendations from earlier questions in
+    # the same session keep reappearing alongside later, unrelated answers.
+    messages_before = len(history)
+    history.append({"role": "user", "content": sub_intent})
+
+    yield ("progress", "understanding_request")
+
+    final_result = None
+    seen_nodes: set[str] = set()
+
+    async for event in app.astream_events(
+        {"messages": history}, version="v2", config={"recursion_limit": 15}
+    ):
+        node_name = event.get("metadata", {}).get("langgraph_node", "")
+        ev_type = event.get("event")
+
+        if ev_type == "on_chain_start" and node_name and node_name not in seen_nodes:
+            seen_nodes.add(node_name)
+            if node_name in ("recommend_agent", "external_offer_agent"):
+                yield ("progress", "searching_products")
+            elif node_name == "inventory_agent":
+                yield ("progress", "checking_inventory")
+
+        if ev_type == "on_chain_end" and event.get("name") == "LangGraph":
+            final_result = event.get("data", {}).get("output")
+
+    if final_result is None:
+        yield ("result", ("Something went wrong processing that — could you try again?", []))
+        return
+
+    new_messages = final_result["messages"][messages_before:]
+    reply_text = get_final_reply(new_messages)
+    all_products = extract_products(new_messages)
+
+    had_external_handoff = any(
+        "NEEDS_EXTERNAL_CHECK" in extract_text(getattr(msg, "content", ""))
+        for msg in new_messages
+        if getattr(msg, "name", None) == "recommend_agent"
+    )
+    products = (
+        [p for p in all_products if p.get("source") == "external"]
+        if had_external_handoff
+        else all_products
+    )
+
+    yield ("progress", "verifying_claims")
+    passed, reason = verify_price_grounding(reply_text, products, customer_message=sub_intent)
+
+    if not passed:
+        correction_note = (
+            f"Your previous answer had a grounding problem: {reason}. "
+            "Provide a corrected answer using ONLY the real prices and data "
+            "from the tool results already available in this conversation — "
+            "do not invent or restate an incorrect price."
+        )
+        reset_guard(max_total_calls=10, max_identical_calls=1)
+        messages_before_correction = len(history)
+        history.append({"role": "user", "content": correction_note})
+        correction_result = await app.ainvoke(
+            {"messages": history}, config={"recursion_limit": 15}
+        )
+        new_correction_messages = correction_result["messages"][messages_before_correction:]
+        corrected_reply = get_final_reply(new_correction_messages)
+        corrected_products = extract_products(new_correction_messages) or products
+        passed_now, _ = verify_price_grounding(
+            corrected_reply, corrected_products, customer_message=sub_intent
+        )
+        if passed_now:
+            reply_text = corrected_reply
+            products = corrected_products
+        else:
+            reply_text = (
+                "I'm having trouble confirming accurate pricing for this "
+                "request right now. Could you rephrase, or I can help you "
+                "look up a specific product directly?"
+            )
+            products = []
+
+    yield ("progress", "preparing_response")
+
+    history.append({"role": "assistant", "content": reply_text})
+    yield ("result", (reply_text, products))
+
+
+async def ask_streaming(app, history: list[dict], message: str, debug: bool = False):
+    """Streaming-aware sibling of ask(). Yields ("progress", label) tuples
+    as real steps occur across all sub-intents, then a final
+    ("result", (final_reply, all_products)) tuple once everything has been
+    processed and merged — same verification-gated pipeline as ask(),
+    with progress visibility for the frontend.
+    """
+    if not message or not message.strip():
+        yield ("result", ("Please type a message.", []))
+        return
+
+    splitter_model = get_chat_model()
+    sub_intents = split_intents(splitter_model, message)
+
+    all_products: list[dict] = []
+    sub_answers: list[str] = []
+
+    for sub_intent in sub_intents:
+        async for kind, payload in _run_single_intent_streaming(app, history, sub_intent, debug):
+            if kind == "progress":
+                yield ("progress", payload)
+            else:
+                reply_text, products = payload
+                all_products.extend(products)
+                sub_answers.append(reply_text)
+
+    final_reply = merge_answers(splitter_model, message, sub_answers)
+    yield ("result", (final_reply, all_products))
