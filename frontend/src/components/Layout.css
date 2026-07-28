@@ -2,14 +2,16 @@
   min-height: 100vh;
   background: var(--color-bg);
   font-family: var(--font-family);
+  overflow-x: hidden;
 }
 
 .layout-header {
   display: flex;
   align-items: center;
   gap: 20px;
-  padding: 14px 28px;
+  padding: 12px 28px;
   background: var(--color-primary);
+  flex-wrap: nowrap;
 }
 
 .layout-logo {
@@ -40,97 +42,92 @@
   letter-spacing: 0.02em;
 }
 
+/* Search: now a large white field per spec, centered, flexible width */
 .layout-search {
   flex: 1;
-  max-width: 380px;
-  background: rgba(255, 255, 255, 0.14);
-  border-radius: 20px;
-  padding: 7px 14px;
+  max-width: 520px;
+  background: #fff;
+  border-radius: 22px;
+  padding: 9px 16px;
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: background var(--transition-fast);
+  min-width: 0;
+  transition: box-shadow var(--transition-fast);
 }
 
 .layout-search:focus-within {
-  background: rgba(255, 255, 255, 0.22);
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 1px;
 }
 
 .layout-search-icon {
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
 }
 
 .layout-search input {
   flex: 1;
+  min-width: 0;
   background: transparent;
   border: none;
   outline: none;
-  color: #fff;
+  color: var(--color-text);
   font-size: var(--font-size-support);
 }
 
 .layout-search input::placeholder {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-muted);
 }
 
 .layout-header-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 6px;
   margin-left: auto;
-  position: relative;
+  flex-shrink: 0;
 }
 
-/* New: header "Need help?" button */
-.layout-help-btn {
+/* Shared action button: icon + label, 44px min tap target */
+.layout-action-btn {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  justify-content: center;
+  gap: 2px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px 10px;
+  background: none;
+  border: none;
   color: #fff;
-  font-size: var(--font-size-support);
-  font-weight: var(--font-weight-semibold);
-  border-radius: 20px;
-  padding: 7px 14px;
+  text-decoration: none;
   cursor: pointer;
+  border-radius: var(--radius-sm);
   transition: background var(--transition-fast);
+}
+
+.layout-action-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.layout-action-btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.layout-action-icon {
+  position: relative;
+  display: flex;
+}
+
+.layout-action-label {
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
   white-space: nowrap;
 }
 
-.layout-help-btn:hover {
-  background: rgba(255, 255, 255, 0.24);
-}
-
-.layout-help-btn:focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 2px;
-}
-
-.layout-icon-btn {
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  text-decoration: none;
-  position: relative;
-  display: flex;
-  color: #fff;
-  transition: opacity var(--transition-fast);
-}
-
-.layout-icon-btn:hover {
-  opacity: 0.8;
-}
-
-.layout-icon-btn:focus-visible {
-  outline: 2px solid #fff;
-  outline-offset: 2px;
-}
-
-.layout-cart-badge {
+.layout-badge {
   position: absolute;
   top: -6px;
   right: -8px;
@@ -138,15 +135,87 @@
   color: var(--color-accent-text);
   font-size: 10px;
   font-weight: var(--font-weight-semibold);
-  width: 16px;
+  min-width: 16px;
   height: 16px;
-  border-radius: 50%;
+  padding: 0 3px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* New: account dropdown */
+/* Need help — outlined pill button per spec */
+.layout-help-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  background: transparent;
+  border: 1.5px solid rgba(255, 255, 255, 0.5);
+  color: #fff;
+  font-size: var(--font-size-support);
+  font-weight: var(--font-weight-semibold);
+  border-radius: 22px;
+  padding: 0 16px;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.layout-help-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: #fff;
+}
+
+.layout-help-btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* Cart: icon + "Cart · N" + subtotal, per spec */
+.layout-cart-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  color: #fff;
+  text-decoration: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--transition-fast);
+}
+
+.layout-cart-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.layout-cart-btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.layout-cart-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.layout-cart-label {
+  font-size: var(--font-size-support);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.layout-cart-subtotal {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Account dropdown (unchanged positioning, just anchored to new wrap) */
 .layout-account-wrap {
   position: relative;
 }
@@ -204,6 +273,7 @@
   padding: 10px 28px;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
 }
 
 .layout-nav-link {
@@ -211,6 +281,7 @@
   color: var(--color-text-secondary);
   text-decoration: none;
   padding-bottom: 6px;
+  white-space: nowrap;
   transition: color var(--transition-fast);
 }
 
@@ -228,4 +299,44 @@
   max-width: 1100px;
   margin: 0 auto;
   padding: 24px 28px;
+}
+
+/* Responsive: collapse text labels on small screens, keep icons + cart count visible */
+@media (max-width: 640px) {
+  .layout-header {
+    padding: 10px 14px;
+    gap: 10px;
+  }
+
+  .layout-search {
+    max-width: none;
+  }
+
+  .layout-action-label {
+    display: none;
+  }
+
+  .layout-help-btn .layout-action-label {
+    display: none;
+  }
+
+  .layout-help-btn {
+    padding: 0 10px;
+  }
+
+  .layout-cart-label {
+    font-size: 12px;
+  }
+
+  .layout-cart-subtotal {
+    display: none;
+  }
+
+  .layout-nav {
+    padding: 10px 14px;
+  }
+
+  .layout-content {
+    padding: 20px 14px;
+  }
 }

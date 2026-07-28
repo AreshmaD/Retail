@@ -9,7 +9,6 @@ import "./Layout.css";
 
 const CATEGORIES = ["Dresses", "Shoes", "Outerwear", "Tops", "Bottoms", "Accessories"];
 
-// Inline icon set matching the reference design (thin outline style, inherits color via currentColor)
 function ChatIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -20,7 +19,7 @@ function ChatIcon() {
 
 function HeartIcon({ filled }) {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z" />
     </svg>
   );
@@ -28,7 +27,7 @@ function HeartIcon({ filled }) {
 
 function UserIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="8" r="4" />
       <path d="M4 21a8 8 0 0 1 16 0" />
     </svg>
@@ -37,7 +36,7 @@ function UserIcon() {
 
 function CartIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="9" cy="21" r="1" />
       <circle cx="19" cy="21" r="1" />
       <path d="M2.5 3h2l2.6 12.4a2 2 0 0 0 2 1.6h8.4a2 2 0 0 0 2-1.6L21 8H6" />
@@ -46,7 +45,7 @@ function CartIcon() {
 }
 
 export default function Layout() {
-  const { itemCount } = useCart();
+  const { itemCount, total } = useCart();
   const { count: savedCount } = useSavedItems();
   const { setIsOpen: setChatOpen } = useChatWidget();
   const [searchInput, setSearchInput] = useState("");
@@ -74,37 +73,37 @@ export default function Layout() {
           <span className="layout-logo-text">Scout</span>
         </Link>
 
-        <form className="layout-search" onSubmit={handleSearchSubmit}>
+        <form className="layout-search" onSubmit={handleSearchSubmit} role="search">
           <span className="layout-search-icon">⌕</span>
           <input
-            placeholder="Search products…"
+            placeholder="Search dresses, shoes, brands, or occasions..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
+            aria-label="Search dresses, shoes, brands, or occasions"
           />
         </form>
 
         <div className="layout-header-actions">
-          <button
-            className="layout-help-btn"
-            onClick={() => setChatOpen(true)}
-            aria-label="Open shopping assistant"
-          >
-            <ChatIcon /> Need help?
-          </button>
-
-          <Link to="/saved" className="layout-icon-btn" aria-label="Saved items">
-            <HeartIcon />
-            {savedCount > 0 && <span className="layout-cart-badge">{savedCount}</span>}
+          <Link to="/saved" className="layout-action-btn" aria-label={`Saved items (${savedCount})`}>
+            <span className="layout-action-icon">
+              <HeartIcon />
+              {savedCount > 0 && <span className="layout-badge">{savedCount}</span>}
+            </span>
+            <span className="layout-action-label">Saved</span>
           </Link>
 
           <div className="layout-account-wrap">
             <button
-              className="layout-icon-btn"
-              aria-label="Account"
+              className="layout-action-btn"
+              aria-label="Account menu"
               aria-expanded={accountOpen}
+              aria-haspopup="true"
               onClick={() => setAccountOpen((o) => !o)}
             >
-              <UserIcon />
+              <span className="layout-action-icon">
+                <UserIcon />
+              </span>
+              <span className="layout-action-label">Account</span>
             </button>
             {accountOpen && (
               <div className="layout-account-dropdown">
@@ -122,9 +121,26 @@ export default function Layout() {
             )}
           </div>
 
-          <Link to="/cart" className="layout-icon-btn layout-cart-btn" aria-label="Cart">
-            <CartIcon />
-            {itemCount > 0 && <span className="layout-cart-badge">{itemCount}</span>}
+          <button
+            className="layout-help-btn"
+            onClick={() => setChatOpen(true)}
+            aria-label="Open shopping assistant"
+          >
+            <ChatIcon />
+            <span className="layout-action-label">Need help?</span>
+          </button>
+
+          <Link to="/cart" className="layout-cart-btn" aria-label={`Cart, ${itemCount} items, subtotal $${total.toFixed(2)}`}>
+            <span className="layout-action-icon">
+              <CartIcon />
+              {itemCount > 0 && <span className="layout-badge">{itemCount}</span>}
+            </span>
+            <span className="layout-cart-text">
+              <span className="layout-cart-label">Cart · {itemCount}</span>
+              {itemCount > 0 && (
+                <span className="layout-cart-subtotal">${total.toFixed(2)}</span>
+              )}
+            </span>
           </Link>
         </div>
       </header>
