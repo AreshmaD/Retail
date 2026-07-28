@@ -75,7 +75,13 @@ export default function ChatWidget() {
   return (
     <div className="chat-widget-panel">
       <header className="chat-widget-header">
-        <span className="chat-widget-title">Scout</span>
+        <div className="chat-widget-header-titles">
+          <span className="chat-widget-title">Scout</span>
+          <span className="chat-widget-status">
+            <span className="chat-widget-status-dot" />
+            Online
+          </span>
+        </div>
         <button
           className="chat-widget-close"
           onClick={() => setIsOpen(false)}
