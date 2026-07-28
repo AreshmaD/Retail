@@ -15,7 +15,12 @@ export default function HomePage() {
         </Link>
       </div>
 
-      <h2 className="home-section-title">Featured products</h2>
+      <div className="home-section-header">
+        <h2 className="home-section-title">Featured products</h2>
+        <Link to="/search" className="home-view-all-link">
+          View all products →
+        </Link>
+      </div>
       <ProductGrid limit={12} />
     </div>
   );

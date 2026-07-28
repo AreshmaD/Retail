@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import ProductCard from "./ProductCard";
+import "./ProductGrid.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
@@ -19,17 +20,11 @@ export default function ProductGrid({ category = null, query = null, limit = 50 
       .finally(() => setLoading(false));
   }, [category, query, limit]);
 
-  if (loading) return <p>Loading…</p>;
-  if (products.length === 0) return <p>No products found.</p>;
+  if (loading) return <p className="product-grid-status">Loading…</p>;
+  if (products.length === 0) return <p className="product-grid-status">No products found.</p>;
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 220px))",
-        gap: "16px",
-      }}
-    >
+    <div className="product-grid">
       {products.map((p) => (
         <ProductCard key={p.product_id} product={p} />
       ))}
