@@ -4,6 +4,7 @@ import { useCart } from "../context/CartContext";
 import { useSavedItems } from "../context/SavedItemsContext";
 import { useChatWidget } from "../context/ChatWidgetContext";
 import ChatWidget from "./ChatWidget";
+import CartToast from "./CartToast";
 import "./Layout.css";
 
 const CATEGORIES = ["Dresses", "Shoes", "Outerwear", "Tops", "Bottoms", "Accessories"];
@@ -154,6 +155,7 @@ export default function Layout() {
       </main>
 
       <ChatWidget />
+      <CartToast />
     </div>
   );
 }

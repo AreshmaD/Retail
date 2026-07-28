@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useEffect } from "react";
+import { createContext, useContext, useReducer, useEffect, useState } from "react";
 
 const CartContext = createContext(null);
 const STORAGE_KEY = "scout_cart";
@@ -56,8 +56,12 @@ function cartReducer(state, action) {
 export function CartProvider({ children }) {
   const [state, dispatch] = useReducer(cartReducer, undefined, loadInitialState);
 
-  // Persist to localStorage every time the cart changes, so it survives
-  // page reloads (Vite full reloads during dev, manual refreshes, etc.)
+  // New: tracks the most recently added item so a toast/mini-cart can react to it.
+  // notifyId increments on every add so the toast re-triggers even if the same
+  // product is added twice in a row.
+  const [lastAdded, setLastAdded] = useState(null);
+  const [notifyId, setNotifyId] = useState(0);
+
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -66,7 +70,11 @@ export function CartProvider({ children }) {
     }
   }, [state]);
 
-  const addToCart = (product) => dispatch({ type: "ADD_ITEM", product });
+  const addToCart = (product) => {
+    dispatch({ type: "ADD_ITEM", product });
+    setLastAdded(product);
+    setNotifyId((n) => n + 1);
+  };
   const removeFromCart = (productId) => dispatch({ type: "REMOVE_ITEM", productId });
   const updateQuantity = (productId, quantity) =>
     dispatch({ type: "UPDATE_QUANTITY", productId, quantity });
@@ -83,6 +91,8 @@ export function CartProvider({ children }) {
     clearCart,
     itemCount,
     total,
+    lastAdded,
+    notifyId,
   };
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
