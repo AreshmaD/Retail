@@ -10,6 +10,7 @@ from scout.api.chat import router as chat_router
 from scout.api.affiliate import router as affiliate_router
 from scout.api.products import router as products_router
 from scout.api.checkout import router as checkout_router
+from scout.api.cart import router as cart_router
 
 
 @asynccontextmanager
@@ -38,6 +39,7 @@ app.include_router(chat_router) # the only agentic one
 app.include_router(affiliate_router) # deterministic 
 app.include_router(products_router) # deterministic 
 app.include_router(checkout_router)# deterministic 
+app.include_router(cart_router) # deterministic
 
 STATIC_IMAGES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "product_images"
 STATIC_IMAGES_DIR.mkdir(parents=True, exist_ok=True)

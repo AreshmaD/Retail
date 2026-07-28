@@ -15,7 +15,7 @@ export default function ProductCard({ product }) {
   const { addToCart } = useCart();
   const { toggleSave, isSaved } = useSavedItems();
 
-  // Add-to-cart interaction state: "idle" | "loading" | "added" | "error"
+  // Add-to-cart interaction state: "idle" | "loading" | "added" | "error" | "out_of_stock"
   const [cartState, setCartState] = useState("idle");
 
   const isExternal = product.source === "external";
@@ -29,15 +29,20 @@ export default function ProductCard({ product }) {
     if (cartState === "loading") return;
     setCartState("loading");
     try {
-      // addToCart is synchronous today (local cart, no API call yet).
-      // Short simulated delay purely so the loading state is visible.
-      await new Promise((resolve) => setTimeout(resolve, 450));
-      addToCart(product);
+      // addToCart now calls the real, authoritative /cart/add endpoint —
+      // it validates stock and returns the true price server-side.
+      // CartContext also guards against duplicate simultaneous requests
+      // for the same product.
+      await addToCart(product);
       setCartState("added");
       setTimeout(() => setCartState("idle"), 1800);
     } catch (err) {
-      setCartState("error");
-      setTimeout(() => setCartState("idle"), 2200);
+      if (err.message === "Out of stock") {
+        setCartState("out_of_stock");
+      } else {
+        setCartState("error");
+        setTimeout(() => setCartState("idle"), 4000);
+      }
     }
   }
 
@@ -62,9 +67,18 @@ export default function ProductCard({ product }) {
   );
 
   function renderCartButton() {
+    if (cartState === "out_of_stock") {
+      return (
+        <button className="product-card-btn product-card-btn--disabled" disabled>
+          Out of stock
+        </button>
+      );
+    }
+
     if (cartState === "loading") {
       return (
         <button className="product-card-btn product-card-btn--loading" disabled>
+          <span className="product-card-spinner" aria-hidden="true" />
           Adding…
         </button>
       );
@@ -80,9 +94,14 @@ export default function ProductCard({ product }) {
 
     if (cartState === "error") {
       return (
-        <button className="product-card-btn product-card-btn--error" onClick={handleAddToCart}>
-          Failed. Try again
-        </button>
+        <>
+          <button className="product-card-btn product-card-btn--error" onClick={handleAddToCart}>
+            Try again
+          </button>
+          <p className="product-card-error-message">
+            Failed to add item. Please try again.
+          </p>
+        </>
       );
     }
 
@@ -102,7 +121,6 @@ export default function ProductCard({ product }) {
           <div className="product-card-image-placeholder">No image</div>
         )}
 
-        {/* Sale badge — only rendered when a real promotion exists, never invented */}
         {product.promotion && (
           <span className="product-card-badge product-card-badge--sale">
             {product.promotion.discount_percent}% OFF
@@ -132,8 +150,6 @@ export default function ProductCard({ product }) {
           <p className="product-card-name">{product.name}</p>
         )}
 
-        {/* Rating shown only when a real value exists. No review count field
-            exists in the backend response, so we never show one. */}
         {typeof product.rating === "number" && product.rating > 0 && (
           <div className="product-card-rating">
             <span className="product-card-star">★</span>
@@ -154,9 +170,6 @@ export default function ProductCard({ product }) {
           <p className="product-card-price">${product.price?.toFixed(2)}</p>
         )}
 
-        {/* No stock/pickup endpoint currently exposes this data for listed
-            products, so per spec we show the honest "not checked" state
-            rather than inventing an in-stock or pickup claim. */}
         {!isExternal && (
           <p className="product-card-availability">
             <span className="product-card-availability-dot" />

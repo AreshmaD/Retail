@@ -1,4 +1,5 @@
-import { createContext, useContext, useReducer, useEffect, useState } from "react";
+import { createContext, useContext, useReducer, useEffect, useState, useRef } from "react";
+import { addToCartRequest } from "../api/client";
 
 const CartContext = createContext(null);
 const STORAGE_KEY = "scout_cart";
@@ -18,18 +19,18 @@ function loadInitialState() {
 function cartReducer(state, action) {
   switch (action.type) {
     case "ADD_ITEM": {
-      const existing = state.items.find((i) => i.product_id === action.product.product_id);
+      const existing = state.items.find((i) => i.product_id === action.item.product_id);
       if (existing) {
         return {
           items: state.items.map((i) =>
-            i.product_id === action.product.product_id
-              ? { ...i, quantity: i.quantity + 1 }
+            i.product_id === action.item.product_id
+              ? { ...i, quantity: i.quantity + action.item.quantity }
               : i
           ),
         };
       }
       return {
-        items: [...state.items, { ...action.product, quantity: 1 }],
+        items: [...state.items, action.item],
       };
     }
     case "REMOVE_ITEM":
@@ -56,11 +57,15 @@ function cartReducer(state, action) {
 export function CartProvider({ children }) {
   const [state, dispatch] = useReducer(cartReducer, undefined, loadInitialState);
 
-  // New: tracks the most recently added item so a toast/mini-cart can react to it.
-  // notifyId increments on every add so the toast re-triggers even if the same
-  // product is added twice in a row.
+  // Tracks the most recently added item (authoritative backend response)
+  // so a toast/mini-cart can react to it.
   const [lastAdded, setLastAdded] = useState(null);
   const [notifyId, setNotifyId] = useState(0);
+
+  // Prevents duplicate simultaneous add requests for the same product —
+  // e.g. a user double-clicking "Add to cart" before the first request
+  // has resolved.
+  const pendingProductIds = useRef(new Set());
 
   useEffect(() => {
     try {
@@ -70,11 +75,47 @@ export function CartProvider({ children }) {
     }
   }, [state]);
 
-  const addToCart = (product) => {
-    dispatch({ type: "ADD_ITEM", product });
-    setLastAdded(product);
-    setNotifyId((n) => n + 1);
+  /**
+   * Calls the authoritative /cart/add endpoint rather than trusting the
+   * product object passed in by the caller. The backend validates real
+   * stock and returns the true price (including any active promotion) —
+   * that response, not the input, is what gets stored in the cart.
+   */
+  const addToCart = async (product, quantity = 1) => {
+    const productId = product.product_id;
+
+    if (pendingProductIds.current.has(productId)) {
+      // A request for this exact product is already in flight — ignore
+      // this duplicate call rather than firing a second request.
+      return;
+    }
+
+    pendingProductIds.current.add(productId);
+    try {
+      const result = await addToCartRequest(productId, quantity);
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to add item");
+      }
+
+      const item = {
+        product_id: result.product_id,
+        name: result.name,
+        brand: product.brand,
+        image_url: result.image_url,
+        price: result.unit_price,
+        promotion: result.promotion,
+        quantity: result.quantity,
+      };
+
+      dispatch({ type: "ADD_ITEM", item });
+      setLastAdded(item);
+      setNotifyId((n) => n + 1);
+    } finally {
+      pendingProductIds.current.delete(productId);
+    }
   };
+
   const removeFromCart = (productId) => dispatch({ type: "REMOVE_ITEM", productId });
   const updateQuantity = (productId, quantity) =>
     dispatch({ type: "UPDATE_QUANTITY", productId, quantity });

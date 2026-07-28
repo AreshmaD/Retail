@@ -64,3 +64,17 @@ export async function streamChatMessage(message, sessionId, callbacks = {}) {
     }
   }
 }
+
+export async function addToCartRequest(productId, quantity = 1) {
+  const response = await fetch(`${BASE_URL}/cart/add`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ product_id: productId, quantity }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Add to cart request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
