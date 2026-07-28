@@ -20,20 +20,17 @@ export default function ProductCard({ product }) {
 
   const isExternal = product.source === "external";
   const saved = isSaved(product);
-  // Respect an explicit in_stock flag from the backend if present; otherwise assume in stock
-  const inStock = product.in_stock !== false;
 
   const resolvedClickUrl = product.click_url
     ? (product.click_url.startsWith("/") ? `${API_BASE}${product.click_url}` : product.click_url)
     : "#";
 
   async function handleAddToCart() {
-    if (cartState === "loading" || !inStock) return;
+    if (cartState === "loading") return;
     setCartState("loading");
     try {
       // addToCart is synchronous today (local cart, no API call yet).
-      // We add a short simulated delay here purely so the loading state
-      // is visible and the interaction doesn't feel instantaneous/jarring.
+      // Short simulated delay purely so the loading state is visible.
       await new Promise((resolve) => setTimeout(resolve, 450));
       addToCart(product);
       setCartState("added");
@@ -65,14 +62,6 @@ export default function ProductCard({ product }) {
   );
 
   function renderCartButton() {
-    if (!inStock) {
-      return (
-        <button className="product-card-btn product-card-btn--disabled" disabled>
-          Out of stock
-        </button>
-      );
-    }
-
     if (cartState === "loading") {
       return (
         <button className="product-card-btn product-card-btn--loading" disabled>
@@ -112,7 +101,16 @@ export default function ProductCard({ product }) {
         ) : (
           <div className="product-card-image-placeholder">No image</div>
         )}
-        {isExternal && <span className="product-card-badge">Third-party</span>}
+
+        {/* Sale badge — only rendered when a real promotion exists, never invented */}
+        {product.promotion && (
+          <span className="product-card-badge product-card-badge--sale">
+            {product.promotion.discount_percent}% OFF
+          </span>
+        )}
+        {isExternal && !product.promotion && (
+          <span className="product-card-badge">Third-party</span>
+        )}
 
         <button
           className={`product-card-save ${saved ? "product-card-save--active" : ""}`}
@@ -134,6 +132,8 @@ export default function ProductCard({ product }) {
           <p className="product-card-name">{product.name}</p>
         )}
 
+        {/* Rating shown only when a real value exists. No review count field
+            exists in the backend response, so we never show one. */}
         {typeof product.rating === "number" && product.rating > 0 && (
           <div className="product-card-rating">
             <span className="product-card-star">★</span>
@@ -149,15 +149,24 @@ export default function ProductCard({ product }) {
             <span className="product-card-price product-card-price--sale">
               ${product.promotion.discounted_price?.toFixed(2)}
             </span>
-            <span className="product-card-promo-badge">
-              {product.promotion.discount_percent}% off
-            </span>
           </div>
         ) : (
           <p className="product-card-price">${product.price?.toFixed(2)}</p>
         )}
 
-        {isExternal ? externalLink : renderCartButton()}
+        {/* No stock/pickup endpoint currently exposes this data for listed
+            products, so per spec we show the honest "not checked" state
+            rather than inventing an in-stock or pickup claim. */}
+        {!isExternal && (
+          <p className="product-card-availability">
+            <span className="product-card-availability-dot" />
+            Availability not checked
+          </p>
+        )}
+
+        <div className="product-card-action">
+          {isExternal ? externalLink : renderCartButton()}
+        </div>
       </div>
     </div>
   );

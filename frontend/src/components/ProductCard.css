@@ -5,15 +5,19 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  height: 100%;
 }
 
+/* Consistent 4:5 aspect ratio image, same crop across all cards */
 .product-card-image {
   position: relative;
-  height: 160px;
+  width: 100%;
+  aspect-ratio: 4 / 5;
   background: var(--color-card-bg);
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .product-card-image img {
@@ -39,11 +43,18 @@
   border-radius: 10px;
 }
 
+.product-card-badge--sale {
+  background: var(--color-sale);
+  color: #fff;
+  text-transform: uppercase;
+}
+
 .product-card-body {
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 3px;
+  flex: 1;
 }
 
 .product-card-brand {
@@ -52,11 +63,17 @@
   margin: 0;
 }
 
+/* Name: max 2 lines, consistent height across cards regardless of title length */
 .product-card-name {
   font-size: var(--font-size-product-title);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text);
   margin: 0 0 2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: calc(var(--font-size-product-title) * 1.3 * 2);
 }
 
 .product-card-rating {
@@ -76,10 +93,56 @@
   font-size: var(--font-size-price);
   font-weight: var(--font-weight-bold);
   color: var(--color-text);
+  margin: 0 0 4px;
+}
+
+.product-card-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.product-card-price--original {
+  font-size: var(--font-size-support);
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+  font-weight: 400;
+  margin: 0;
+}
+
+.product-card-price--sale {
+  font-size: var(--font-size-price);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-sale);
+  margin: 0;
+}
+
+/* Honest "not checked" availability line — never invents real stock/pickup status */
+.product-card-availability {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--color-text-muted);
   margin: 0 0 8px;
 }
 
-/* Base button — all states share this, then override below */
+.product-card-availability-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+/* Pushes the action button to the bottom, keeping equal card heights
+   and aligned buttons across a row regardless of content length above */
+.product-card-action {
+  margin-top: auto;
+}
+
 .product-card-btn {
   background: var(--color-primary-light);
   color: #fff;
@@ -109,20 +172,17 @@
   cursor: not-allowed;
 }
 
-/* Loading state */
 .product-card-btn--loading {
   background: var(--color-primary-light);
   opacity: 0.65;
 }
 
-/* Success / added state */
 .product-card-btn--added {
   background: var(--color-success-bg);
   color: var(--color-success);
   opacity: 1;
 }
 
-/* Error state */
 .product-card-btn--error {
   background: var(--color-error-bg);
   color: var(--color-error);
@@ -132,13 +192,6 @@
 .product-card-btn--error:hover {
   background: var(--color-error);
   color: #fff;
-}
-
-/* Out of stock / disabled state */
-.product-card-btn--disabled {
-  background: var(--color-border);
-  color: var(--color-text-muted);
-  opacity: 1;
 }
 
 .product-card-btn--external {
@@ -183,39 +236,6 @@
 
 .product-card-name-link:hover .product-card-name {
   color: var(--color-primary-light);
-}
-
-.product-card-price-row {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-}
-
-.product-card-price--original {
-  font-size: var(--font-size-support);
-  color: var(--color-text-muted);
-  text-decoration: line-through;
-  font-weight: 400;
-  margin: 0;
-}
-
-.product-card-price--sale {
-  font-size: var(--font-size-price);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-sale);
-  margin: 0;
-}
-
-.product-card-promo-badge {
-  background: var(--color-sale);
-  color: #fff;
-  font-size: 9px;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 8px;
-  text-transform: uppercase;
 }
 
 .product-card-external-wrap {
