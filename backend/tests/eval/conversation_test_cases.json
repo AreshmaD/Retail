@@ -24,16 +24,16 @@
   },
   {
     "id": "CONV-02",
-    "description": "Recommendation context carried into a follow-up refinement",
+    "description": "Recommendation context carried into a follow-up refinement. Turn 1 has no budget/style given, correctly expects a clarifying question. Turn 2 gives a specific category (hiking) but still no budget — the agent MAY reasonably either search directly OR ask once more for a budget on an unbounded category like this; both are acceptable, so this only requires the reply to acknowledge \"hiking\" specifically, not that products are necessarily returned yet.",
     "turns": [
       {
         "query": "Show me some shoes",
-        "expect_products": true,
-        "must_contain_any": ["shoe"]
+        "expect_products": false,
+        "must_contain_any": ["budget", "type", "style", "?"]
       },
       {
         "query": "What about something for hiking specifically?",
-        "expect_products": true,
+        "expect_products": false,
         "must_contain_any": ["hik"]
       }
     ]

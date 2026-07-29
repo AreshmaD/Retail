@@ -4,7 +4,7 @@
     "description": "Product recommendation under budget",
     "passed": true,
     "failures": [],
-    "reply": "Great! Here are my top 3 dress recommendations under $80:\n\n1. **Black Midi Dress** by Aria & Co \u2014 **$67.99** (was $79.99, 15% off)\n   - Rating: 4.3/5\n   - A versatile black midi dress perfect for evening wear. This is a great all-around option for formal occasions or parties.\n\n2. **Slip Dress** by Meridian \u2014 **$53.12** (was $62.50, 15% off)\n   - Rating: 3.9/5\n   - A satin slip dress with an elegant, relaxed drape. Perfect for a sophisticated evening look at an excellent price.\n\n3. **Wrap Dress** by Aria & Co \u2014 **$57.80** (was $68.00, 15% off)\n   - Rating: 4.4/5 (highest rated!)\n   - A flattering wrap dress that works beautifully for both office and evenings out. This is the highest-rated option and offers versatility.\n\nAll three are currently on sale with an additional 15% discount! Which style appeals to you most?",
+    "reply": "Great! I found some lovely options, and they're all on sale right now. Here's what we've got:\n\n**Black Midi Dress by Aria & Co** \u2014 ~~$79.99~~ now **$67.99** (rated 4.3/5)\nThis is perfect for evening wear and has that formal, polished vibe. The 15% discount brings it well within budget.\n\n**Slip Dress by Meridian** \u2014 ~~$62.50~~ now **$53.12** (rated 3.9/5)\nA satin slip dress with beautiful drape that works for parties or evenings. Super elegant and the most affordable after the discount.\n\n**Wrap Dress by Aria & Co** \u2014 ~~$68.00~~ now **$57.80** (rated 4.4/5)\nThis one's versatile\u2014you can dress it up for a night out or wear it to the office. It has the highest rating of the three and is also nicely discounted.\n\nAll three are currently in stock and part of an active dress sale. Which style appeals to you most?",
     "product_count": 3
   },
   {
@@ -12,7 +12,7 @@
     "description": "Stock check by size",
     "passed": true,
     "failures": [],
-    "reply": "Unfortunately, the **Black Midi Dress by Aria & Co in a medium is currently out of stock** in the warehouse.\n\nWould you like me to:\n1. Check if it's available at any of our physical stores?\n2. Check availability in a different size?\n3. Search for similar black midi dresses?",
+    "reply": "Unfortunately, the black midi dress in a medium isn't currently in stock. Would you like me to check what sizes we do have available, or let you know about other options?",
     "product_count": 1
   },
   {
@@ -20,7 +20,7 @@
     "description": "Store pickup availability",
     "passed": true,
     "failures": [],
-    "reply": "Yes! The **Black Midi Dress** by Aria & Co is available at the **Maple Grove store**. There are currently **2 units in stock**.\n\n**Store Details:**\n- Location: 123 Main St, Maple Grove, MN\n- Quantity Available: 2\n- Price: ~~$79.99~~ **$67.99** (on sale - 15% off)\n\nYou're welcome to stop by the store to check it out!",
+    "reply": "Yes, the Black Midi Dress is available at Maple Grove! They currently have 2 in stock. It's by Aria & Co and is priced at $79.99 (there's actually a 15% discount making it $67.99 if the sale is active). Would you like to know about pickup options or anything else?",
     "product_count": 1
   },
   {
@@ -28,7 +28,7 @@
     "description": "Order tracking",
     "passed": true,
     "failures": [],
-    "reply": "Great! Here's the status of your order **O1001**:\n\n**Status:** Shipped  \n**Order Created:** July 26, 2026\n\n**Items:**\n- Running Shoes (Qty: 1) \u2014 $64.99\n\n**Total:** $64.99\n\nYour order has been shipped! Unfortunately, I don't have tracking number details available in the order information. For specific tracking details or delivery estimates, you may need to check your email for a shipping confirmation or contact our support team.",
+    "reply": "Great news \u2014 your order O1001 is on its way! It's currently **shipped** and contains one pair of Running Shoes that you ordered on July 26th. The order total was $64.99.\n\nSince this is marked as shipped, it should be heading your way soon. Unfortunately, I don't have real-time tracking details beyond the shipped status, but you can expect delivery within the typical timeframe for your region.",
     "product_count": 0
   },
   {
@@ -36,7 +36,7 @@
     "description": "Return policy question (RAG grounded)",
     "passed": true,
     "failures": [],
-    "reply": "Based on Scout's return policy, **opened items are generally not eligible for return**, with one exception:\n\n**Opened or worn items cannot be returned unless they are defective.**\n\nFor a standard return, items must be:\n- Unworn and unwashed\n- Have original tags attached\n- Returned within 30 days of delivery\n\n**However, if the opened item is defective**, you may still be able to return it. In that case, you can use the order lookup in the Scout app and select \"Start a Return\" to initiate the process and explain the defect.\n\nIs the item you're looking to return defective, or is it just opened/unused?",
+    "reply": "Unfortunately, opened items generally can't be returned\u2014we require items to be unworn, unwashed, and have the original tags still attached. The one exception is if the item is defective, which you'd definitely be able to return.\n\nIf your item has an issue or defect, that would qualify for a return. Otherwise, if it's just been opened but unused, it wouldn't be eligible. Is there something specific about the item that's the concern?",
     "product_count": 0
   },
   {
@@ -44,33 +44,33 @@
     "description": "Refund timeline (RAG grounded, specific fact)",
     "passed": true,
     "failures": [],
-    "reply": "Based on our refund policy, here's the timeline:\n\n**Refunds to your original payment method:** 5-7 business days after we receive and inspect the returned item.\n\n**Store credit refunds:** 1 business day after we receive and inspect the item.\n\nKeep in mind that this timeframe starts once we've received and inspected your return, so the total time may be a bit longer depending on shipping time. If you have questions about a specific refund or need to track the status of your return, feel free to let me know!",
+    "reply": "Once we receive and inspect your returned item, refunds back to your original payment method take **5-7 business days**. \n\nIf you'd prefer store credit instead, that's processed much faster\u2014just **1 business day**.",
     "product_count": 0
   },
   {
     "id": "TC-07",
     "description": "Out-of-catalog request triggers affiliate fallback, not hallucination",
-    "passed": false,
-    "failures": [
-      "reply missing any of: ['shopbop', 'vendor', 'third-party', \"we don't carry\", \"we don't have\"]"
-    ],
-    "reply": "I couldn't quite find what you're looking for \u2014 want to try asking a different way, or is there something else I can help with?",
-    "product_count": 5
+    "passed": true,
+    "failures": [],
+    "reply": "Great news! I found a red cocktail dress option from a third-party vendor that fits your budget:\n\n**Enid Satin Body-Con Evening Dress** from **Nordstrom Rack** \u2014 **$35.98** (rated 4.0/5)\n\nThis is a red satin dress perfect for evening and party wear. You can check it out here: [/affiliate/click/EX011]\n\nI also found a couple of other dressy options under $50 if you're interested:\n- A **Ruched Midi Dress** from Nordstrom Rack at $29.96, though that one's black rather than red\n- A **Twist-Front Midi Dress** from Target at $45.00\n\nThe red Enid dress really seems like it would match what you're looking for!",
+    "product_count": 3
   },
   {
     "id": "TC-08",
     "description": "Vague request should ask clarifying question, not guess",
     "passed": true,
     "failures": [],
-    "reply": "I'd love to help you find something perfect for a party! To give you the best recommendations, I need a couple more details:\n\n1. **What's your budget?** (e.g., under $50, under $100, etc.)\n2. **What type of item are you looking for?** (e.g., dress, outfit, shoes, accessories, or are you open to suggestions?)\n\nOnce I know these, I can find you some great in-stock options!",
+    "reply": "I'd love to help you find something perfect for your party! To point you toward the best options, I need a couple of quick details:\n\n**What's your budget?** (e.g., under $50, around $100\u2013$150, etc.)\n\nAnd **what kind of item** are you thinking \u2014 like a dress, top, shoes, or something else?",
     "product_count": 0
   },
   {
     "id": "TC-09",
     "description": "Checkout via agent",
-    "passed": true,
-    "failures": [],
-    "reply": "Actually, I apologize for that confusion\u2014here's what you need to do instead:\n\n**To purchase the Black Midi Dress:**\n1. Go to the product page and add it to your cart\n2. Proceed to your cart\n3. Complete checkout on the cart page\n\nDuring checkout, you'll be able to enter your payment information and finalize your order. That's the secure way for us to process your purchase.\n\nIs there anything else I can help you with, like checking the status of an existing order?",
+    "passed": false,
+    "failures": [
+      "reply missing any of: ['confirm', '$79.99', 'total', 'proceed']"
+    ],
+    "reply": "Actually, I apologize - let me give you the right way to do this. To buy the Black Midi Dress, just add it to your cart and head to checkout on our cart page. That's where you'll complete the purchase and pay for it. Simple as that!\n\nIf you run into any issues during checkout or have questions about the dress itself, happy to help.",
     "product_count": 0
   },
   {
@@ -84,21 +84,21 @@
         "query": "Recommend a dress under $80",
         "passed": true,
         "failures": [],
-        "reply": "Great! Here are my top 3 dress recommendations under $80, all currently on sale:\n\n1. **Black Midi Dress by Aria & Co** \u2013 $67.99 *(was $79.99, 15% off)*\n   - Rating: 4.3/5\n   - A versatile black midi dress perfect for evening wear and formal occasions. Great for dressing up!\n\n2. **Slip Dress by Meridian** \u2013 $53.12 *(was $62.50, 15% off)*\n   - Rating: 3.9/5\n   - A chic satin slip dress with an elegant drape, ideal for evening and party wear.\n\n3. **Wrap Dress by Aria & Co** \u2013 $57.80 *(was $68.00, 15% off)*\n   - Rating: 4.4/5 (highest rated!)\n   - A flattering wrap style that works for both office wear and nights out.\n\nAll three are currently included in a Dress Sale with 15% off! The Wrap Dress offers the best rating and is a versatile option for multiple occasions. Would you like more details about any of these, or help with sizing/color options?"
+        "reply": "Actually, I've already found you some great options! Here are three dresses under $80 that are currently in stock:\n\n**Black Midi Dress** by Aria & Co \u2014 ~~$79.99~~ **$67.99** (15% off)  \nA versatile black midi dress perfect for evening wear. Rated 4.3/5, it works great for formal events or nights out.\n\n**Wrap Dress** by Aria & Co \u2014 ~~$68.00~~ **$57.80** (15% off)  \nThis flattering wrap dress is a customer favorite at 4.4/5 stars. It's versatile enough for the office or evenings out.\n\n**Slip Dress** by Meridian \u2014 ~~$62.50~~ **$53.12** (15% off)  \nA satin slip dress with elegant drape, perfect for evening occasions. Rated 3.9/5.\n\nEverything's on sale right now with 15% off. Which style resonates with you?"
       },
       {
         "turn": 2,
         "query": "Is the black midi dress in a medium?",
         "passed": true,
         "failures": [],
-        "reply": "Unfortunately, the **Black Midi Dress in medium is currently out of stock** in our warehouse.\n\nWould you like me to:\n1. Check if it's available in a **different size** (small, large, XL, etc.)?\n2. Check if it's available for **store pickup** at any nearby locations?\n3. Show you the other dress recommendations in medium instead?\n\nLet me know how I can help!"
+        "reply": "Unfortunately, the Black Midi Dress isn't currently available in a medium. Do you want me to check what sizes we do have in stock, or would one of the other dresses work better for you?"
       },
       {
         "turn": 3,
         "query": "Is it available to pick up at Maple Grove?",
         "passed": true,
         "failures": [],
-        "reply": "Great news! **The Black Midi Dress is available for pickup at Maple Grove** \u2013 they have 2 in stock!\n\n**Maple Grove Store:**\n\ud83d\udccd 123 Main St, Maple Grove, MN\n\nThe store has inventory available, though I don't have visibility into the specific size breakdown at that location. I'd recommend calling the store at your earliest convenience to confirm they have a **medium** in stock before heading over.\n\nWould you like help with anything else?"
+        "reply": "Good news \u2014 the Black Midi Dress is in stock at Maple Grove! They have 2 available. However, based on your earlier question, we know a medium isn't currently available overall. Let me check what sizes they have at that store so you know what to expect when you go in."
       }
     ]
   },
@@ -115,16 +115,14 @@
         "failures": [
           "expected products, got none"
         ],
-        "reply": "I'd love to help you find shoes! To give you the best recommendations, could you tell me:\n\n1. **What type of shoes** are you looking for? (e.g., sneakers, boots, heels, casual flats, athletic shoes, etc.)\n2. **What's your budget?** (e.g., under $50, under $100, etc.)\n\nOnce I have those details, I can show you some great in-stock options!"
+        "reply": "I'd love to help you find shoes! To narrow it down a bit \u2014 do you have a specific style in mind (like sneakers, sandals, boots, heels, etc.) and/or a budget range? That'll help me point you toward what you're actually looking for."
       },
       {
         "turn": 2,
         "query": "What about something for hiking specifically?",
-        "passed": false,
-        "failures": [
-          "expected products, got none"
-        ],
-        "reply": "I'd be happy to help you find hiking shoes! To narrow it down, what's your budget? For example, are you looking to spend under $75, $100, $150, or something else?"
+        "passed": true,
+        "failures": [],
+        "reply": "Great! Here's what I found:\n\n**Nordic Trail Hiking Boots** (P008) \u2014 $88.00 *(20% off, was $110)*\nThese are the top match for hiking. They're waterproof and built specifically for the trail, with a solid 4.6-star rating. The clearance discount brings them down nicely.\n\nThe other results that came back are more casual/everyday shoes rather than true hiking boots, so that Nordic Trail option is really your best fit from what we have in stock right now.\n\nDo you want to check sizing or colors for those hiking boots, or would you like me to look for alternatives?"
       }
     ]
   },
@@ -139,14 +137,14 @@
         "query": "Recommend a dress under $80",
         "passed": true,
         "failures": [],
-        "reply": "Great news! Here are three excellent dress options under $80, all currently on sale:\n\n1. **Black Midi Dress** by Aria & Co \u2014 **Now $67.99** (was $79.99, 15% off)\n   - Rating: 4.3/5\n   - A versatile black midi dress perfect for formal events and evening wear. Great for dressing up!\n\n2. **Slip Dress** by Meridian \u2014 **Now $53.12** (was $62.50, 15% off)\n   - Rating: 3.9/5\n   - A satin slip dress with an elegant, relaxed drape\u2014ideal for parties and evening occasions.\n\n3. **Wrap Dress** by Aria & Co \u2014 **Now $57.80** (was $68.00, 15% off)\n   - Rating: 4.4/5 (highest rated!)\n   - A flattering wrap dress that works for both the office and nights out. Super versatile!\n\nAll three are currently part of a Dress Sale with 15% off. The Wrap Dress has the highest rating and is also the most versatile option if you want something that transitions easily between different occasions. Would any of these work for you?"
+        "reply": "Great finds! All three are on sale right now with 15% off:\n\n**Black Midi Dress** by Aria & Co \u2014 ~~$79.99~~ **$67.99**  \nThis versatile midi is perfect if you want something polished for evening or formal occasions. It's got solid reviews at 4.3/5 and works great as a statement piece.\n\n**Slip Dress** by Meridian \u2014 ~~$62.50~~ **$53.12**  \nA satin slip with beautiful drape, great for a more relaxed-elegant vibe. It's party-ready but still feel effortless.\n\n**Wrap Dress** by Aria & Co \u2014 ~~$68.00~~ **$57.80**  \nThis one's the highest-rated at 4.4/5 and it's genuinely versatile\u2014wear it to the office or dress it up for a night out. A true wardrobe staple.\n\nAny of these catching your eye, or would you like to know more about a specific one?"
       },
       {
         "turn": 2,
         "query": "What's your return policy?",
         "passed": true,
         "failures": [],
-        "reply": "Here's Scout's return policy:\n\n**Return Policy**\n- Items can be returned within **30 days of delivery** for a full refund\n- Items must be **unworn, unwashed, and have original tags attached**\n- Opened or worn items are not eligible for return unless they're defective\n- Sale items marked as **\"Final Sale\" cannot be returned or exchanged**\n- To start a return, use the order lookup in the app and select \"Start a Return\"\n\n**Refund Timeline**\n- Refunds are issued to your original payment method within **5-7 business days** after we receive and inspect the returned item\n- Store credit refunds are processed faster\u2014within **1 business day**\n- Shipping fees are non-refundable, except when the return is due to our error (wrong item or defective product)\n\n**Exchange Option**\nIf you prefer an exchange instead, you can exchange for a different size or color within 30 days of delivery (subject to availability). In-store exchanges are also accepted.\n\nDo you have any other questions about returns, refunds, or exchanges?"
+        "reply": "Here's how returns work at Scout:\n\nYou've got **30 days from delivery** to send something back for a full refund, as long as it's unworn, unwashed, and has the original tags still attached. If something's already been worn or opened, it won't qualify\u2014unless there's a defect.\n\nOne thing to keep in mind: anything tagged as \"Final Sale\" can't be returned or exchanged, so check that before you buy.\n\nOnce your return arrives and we inspect it, you'll get your refund back to your original payment method within 5-7 business days. (Store credit refunds move faster\u2014just 1 business day.) Fair warning though\u2014shipping costs don't get refunded unless the issue was on our end, like we sent the wrong item or something defective.\n\nStarting a return is easy too\u2014just use the order lookup in the app and hit \"Start a Return.\"\n\nDoes that answer what you were wondering, or do you have questions about a specific order?"
       }
     ]
   },
@@ -155,7 +153,7 @@
     "description": "Routes to recommend_agent for open-ended recommendation",
     "passed": true,
     "failures": [],
-    "reply": "Great! Here are three dresses under $80, all currently on sale:\n\n1. **Black Midi Dress** by Aria & Co \u2014 **$67.99** (was $79.99, 15% off)\n   - Rating: 4.3/5\n   - Perfect for evening wear, formal, or party occasions. A versatile staple that works for many occasions.\n\n2. **Wrap Dress** by Aria & Co \u2014 **$57.80** (was $68.00, 15% off)\n   - Rating: 4.4/5\n   - Flattering wrap style that transitions seamlessly from office to evenings out. Great versatility for your wardrobe.\n\n3. **Slip Dress** by Meridian \u2014 **$53.12** (was $62.50, 15% off)\n   - Rating: 3.9/5\n   - Elegant satin slip dress with a relaxed drape, perfect for evening and party looks.\n\nAll three are currently included in a Dress Sale with 15% off. Would any of these work for you, or would you like recommendations for a specific style (casual, formal, etc.)?",
+    "reply": "Great news\u2014there's a Dress Sale going on right now with 15% off! Here are my top picks:\n\n**Black Midi Dress** by Aria & Co \u2014 ~~$79.99~~ **$67.99** (4.3\u2605)  \nA timeless black midi that works for evening events and parties. The classic cut makes it super versatile.\n\n**Slip Dress** by Meridian \u2014 ~~$62.50~~ **$53.12** (3.9\u2605)  \nIf you want something with an elegant drape, this satin slip dress has that relaxed-but-refined vibe perfect for nights out.\n\n**Wrap Dress** by Aria & Co \u2014 ~~$68~~ **$57.80** (4.4\u2605)  \nThis one's a real standout\u2014customers rate it highest! It's designed to flatter and works equally well at the office or out for the evening.\n\nAll three are well under budget, especially with the sale applied. Which style appeals to you most?",
     "product_count": 3
   },
   {
@@ -163,7 +161,7 @@
     "description": "Routes to inventory_agent for stock/store question",
     "passed": true,
     "failures": [],
-    "reply": "Unfortunately, the **black midi dress in a medium is currently out of stock** in the warehouse.\n\nThe Black Midi Dress by Aria & Co (Product P001) doesn't have a medium available right now. Would you like me to:\n- Check if it's available at any physical stores?\n- Check stock for a different size?\n\nLet me know how I can help!",
+    "reply": "Unfortunately, we don't have the black midi dress in a medium available in our warehouse right now. Would you like me to check if it's available at any of our stores for pickup, or see what other sizes we might have in stock?",
     "product_count": 1
   },
   {
@@ -171,7 +169,7 @@
     "description": "Routes to order_agent for order tracking",
     "passed": true,
     "failures": [],
-    "reply": "Great! Here's the status of your order **O1001**:\n\n- **Status:** Shipped\n- **Order Date:** July 26, 2026\n- **Item:** Running Shoes (Qty: 1)\n- **Total:** $64.99\n\nYour order has been shipped! However, I don't have tracking details in the system. For specific tracking information and an estimated delivery date, please check your email for a shipping confirmation with a tracking number, or visit your account page on Scout's website.\n\nIs there anything else you'd like to know about this order?",
+    "reply": "Your order O1001 is on its way! It's currently **shipped**. You ordered a pair of Running Shoes back on July 26, 2026, for $64.99.\n\nSince it's already in transit, you should be expecting it soon. If you need more detailed tracking info or have concerns about delivery, you may want to check any shipping confirmation email you received \u2014 that'll have the carrier and tracking number details.",
     "product_count": 0
   },
   {
@@ -179,23 +177,26 @@
     "description": "Routes to policy_agent for policy question",
     "passed": true,
     "failures": [],
-    "reply": "## Scout's Return Policy\n\nHere's our return policy:\n\n**Return Eligibility:**\n- Items may be returned within **30 days of delivery** for a full refund\n- Items must be **unworn, unwashed, and have original tags attached**\n- Opened or worn items are not eligible for return unless they are defective\n- Sale items marked **\"Final Sale\" cannot be returned or exchanged**\n\n**How to Start a Return:**\nUse the order lookup in the app and select \"Start a Return\"\n\n**Refund Timeline:**\n- Refunds are issued to the original payment method within **5-7 business days** after we receive and inspect the returned item\n- If you prefer store credit instead, it's processed within **1 business day**\n- **Shipping fees are non-refundable** unless the return is due to our error (wrong item shipped or defective product)\n\nDo you have any other questions about returns, exchanges, refunds, or shipping?",
+    "reply": "Here's how our return process works:\n\nYou have **30 days from delivery** to return items for a full refund. The key thing is that items need to be unworn, unwashed, and have their original tags still attached. If something's been worn or opened, it's not returnable unless it's defective.\n\nJust a heads up\u2014anything marked as \"Final Sale\" is off the table for returns or exchanges.\n\nTo get started, just head to our app, use the order lookup, and select \"Start a Return.\" Once we receive and inspect your item, your refund will be processed to your original payment method within 5-7 business days (or 1 business day if you opt for store credit instead).\n\nOne more thing: shipping costs are non-refundable unless the issue was on our end, like we sent you the wrong item or something arrived damaged.\n\nIs there anything specific about the process you'd like to know more about?",
     "product_count": 0
   },
   {
     "id": "ROUTE-05",
     "description": "CRITICAL: routes to external_offer_agent when nothing internal matches \u2014 hand-off is no longer automatic (Phase 2 tradeoff), this confirms whether the supervisor still reliably makes that choice on its own",
-    "passed": true,
-    "failures": [],
-    "reply": "Unfortunately, I found some dresses under $50 through our third-party partners, but I wasn't able to locate a **red** cocktail dress specifically at that price point. Here's what I found:\n\n**Third-Party Options Under $50:**\n\n1. **Ruched Midi Dress** \u2014 **Nordstrom Rack** (THIRD-PARTY)\n   - Price: $29.96\n   - Rating: 4.2/5\n   - Style: Black formal/evening dress\n   - [View on Nordstrom Rack](/affiliate/click/EX001)\n\n2. **Twist-Front Midi Dress** \u2014 **Target** (THIRD-PARTY)\n   - Price: $45.00\n   - Rating: 3.4/5\n   - Style: Casual everyday dress\n   - [View on Target](/affiliate/click/EX009)\n\nUnfortunately, neither of these matches your specific request for a red cocktail dress. Would you be interested in:\n- Expanding your budget slightly for a red cocktail dress?\n- Considering a different color cocktail dress under $50?\n- Looking at these alternatives from our third-party partners?\n\nLet me know how I can help!",
-    "product_count": 7
+    "passed": false,
+    "failures": [
+      "expected products in response, got none",
+      "reply missing any of: ['shopbop', 'vendor', 'third-party', \"we don't carry\", \"we don't have\"]"
+    ],
+    "reply": "I couldn't quite find what you're looking for \u2014 want to try asking a different way, or is there something else I can help with?",
+    "product_count": 0
   },
   {
     "id": "ROUTE-06",
     "description": "order_agent must refuse to process a purchase (Phase 1 boundary still enforced after the agent split)",
     "passed": true,
     "failures": [],
-    "reply": "I can't charge you directly in conversation \u2014 I'm a read-only order tracking agent without access to payment processing.\n\nHere's how to purchase the Black Midi Dress:\n\n1. **Find the item** on Scout's website and add it to your cart\n2. **Go to your cart** and review your items\n3. **Complete checkout** on the cart page, where you can enter your payment information securely\n\nIf you have any questions about an **existing order** (like checking its status or tracking), I'm happy to help with that \u2014 just provide me the order ID!",
+    "reply": "I can't charge you directly in our chat, but getting that Black Midi Dress into your hands is easy! Just head over to your cart on the website, add the dress if you haven't already, and complete checkout from there. You'll go through the payment process on the checkout page.\n\nIf you run into any issues finding the dress or checking out, let me know and I'm happy to help troubleshoot!",
     "product_count": 0
   }
 ]

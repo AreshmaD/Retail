@@ -29,10 +29,10 @@
   },
   {
     "id": "ROUTE-05",
-    "description": "CRITICAL: routes to external_offer_agent when nothing internal matches — hand-off is no longer automatic (Phase 2 tradeoff), this confirms whether the supervisor still reliably makes that choice on its own",
+    "description": "CRITICAL: routes to external_offer_agent when internal search doesn't fully satisfy the request — hand-off is no longer automatic (Phase 2 tradeoff). Note: the external catalog now includes a real red dress match (EX011), so this confirms EXTERNAL ROUTING happened at all (via real vendor names), not specifically an honest 'we don't have this' apology, which was the old catalog's only possible outcome here.",
     "query": "Do you have any red cocktail dresses under $50?",
     "expect_products": true,
-    "must_contain_any": ["shopbop", "vendor", "third-party", "we don't carry", "we don't have"],
+    "must_contain_any": ["nordstrom", "target", "shopbop", "vendor", "third-party"],
     "must_not_contain": ["vendor a", "vendor b", "example.com", "example-vendor"]
   },
   {

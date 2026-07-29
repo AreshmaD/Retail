@@ -5,8 +5,8 @@ from mcp.server.fastmcp import FastMCP
 from scout.db.session import SessionLocal
 from scout.db.models import Product
 from scout.services.product_service import search_products, check_stock, find_alternatives
-from scout.services.store_service import check_store_stock
-from scout.services.order_service import get_order
+from scout.services.store_service import check_store_stock, get_fulfillment_options
+from scout.services.order_service import get_order, list_orders_for_customer, check_return_eligibility
 from scout.services.ranking_service import rank_products
 from scout.services.affiliate_service import find_external_alternative
 from scout.rag.vector_store import retrieve_policy_chunks as _retrieve_policy_chunks
@@ -174,12 +174,57 @@ def alternatives(product_id: str, limit: Union[str, int] = 3) -> list[dict]:
 
 
 @mcp.tool()
+def fulfillment_options(product_id: str, store_name: str = "") -> dict:
+    """Check available fulfillment methods for a product: real store
+    pickup locations with actual stock, and a delivery estimate grounded
+    in our real shipping policy (3-5 business days standard, free over
+    $50; 1-2 business days express for $14.99). This is a policy-based
+    estimate, NOT live carrier tracking — never state a specific delivery
+    date, only the general timeframe."""
+    session = SessionLocal()
+    try:
+        return get_fulfillment_options(session, product_id, store_name=store_name or None)
+    finally:
+        session.close()
+
+
+@mcp.tool()
 def stores(product_id: str, store_name: str = "") -> dict:
     """Check store-level stock for a product, optionally filtered to a
     named store. Leave store_name empty to check all stores."""
     session = SessionLocal()
     try:
         return check_store_stock(session, product_id, store_name=store_name or None)
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def order_history(customer_id: str) -> list[dict]:
+    """Look up all past orders for a customer ID. Read-only, same as
+    `orders`. NOTE: there is no real authentication in this system — the
+    customer must state their own customer ID for this to work (e.g.
+    "I'm customer C001"). Never guess or assume a customer_id."""
+    session = SessionLocal()
+    try:
+        return list_orders_for_customer(session, customer_id)
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def return_eligibility(order_id: str) -> dict:
+    """Checks whether an order LIKELY qualifies for a return, based on
+    real order status and a 30-day policy window. Uses order date as an
+    approximation for delivery date (no real delivery tracking exists) —
+    ALWAYS mention this is an estimate, and that final eligibility also
+    depends on item condition and Final Sale status, which this tool
+    cannot verify. Never state a definitive "yes you can return this" —
+    frame it as "likely eligible" or "likely not eligible", per the
+    tool's own "likely_eligible" field and "reason" explanation."""
+    session = SessionLocal()
+    try:
+        return check_return_eligibility(session, order_id)
     finally:
         session.close()
 

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -82,3 +83,50 @@ def update_order_status(session: Session, order_id: str, status: str) -> Optiona
         return None
     session.commit()
     return get_order(session, order_id)
+
+def check_return_eligibility(session: Session, order_id: str) -> dict:
+    """Checks whether an order is likely within the return window, based
+    on real policy (30 days) and the order's actual status/date. Uses
+    order creation date as a PROXY for delivery date, since there is no
+    real delivery-tracking field — this is explicitly flagged in the
+    result rather than presented as a precise delivery-based answer.
+    Never determines FINAL eligibility (condition, tags, final-sale status
+    can't be verified from data alone) — this is a starting-point check,
+    not a guarantee."""
+    order = get_order(session, order_id)
+    if not order:
+        return {"order_id": order_id, "found": False}
+
+    if order["status"] not in ("shipped", "delivered"):
+        return {
+            "order_id": order_id,
+            "found": True,
+            "status": order["status"],
+            "likely_eligible": False,
+            "reason": f"Order status is '{order['status']}' — return window "
+                      f"typically starts once an order is delivered.",
+        }
+
+    created_at = datetime.fromisoformat(order["created_at"])
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    days_since_order = (datetime.now(timezone.utc) - created_at).days
+
+    within_window = days_since_order <= 30
+
+    return {
+        "order_id": order_id,
+        "found": True,
+        "status": order["status"],
+        "days_since_order_placed": days_since_order,
+        "likely_eligible": within_window,
+        "reason": (
+            f"Order was placed {days_since_order} days ago. Our return "
+            f"policy allows returns within 30 days of DELIVERY (not order "
+            f"date) — this estimate uses order date as an approximation, "
+            f"since exact delivery date isn't tracked. Final eligibility "
+            f"also depends on item condition (unworn, tags attached) and "
+            f"whether it was marked Final Sale — this check cannot verify "
+            f"those."
+        ),
+    }

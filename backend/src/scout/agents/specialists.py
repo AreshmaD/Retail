@@ -25,6 +25,13 @@ Rules:
   (e.g. "dress", "shoes") AND a price limit (e.g. "under $80"), that is
   enough information — proceed directly to searching, do NOT ask about
   occasion, style, or anything else.
+- Whenever you DO ask a clarifying question, ALWAYS explicitly acknowledge
+  what the customer already told you first, even across turns (e.g. if
+  they said "hiking shoes" and only budget is still missing, say
+  something like "Got it, hiking shoes — what's your budget?" rather than
+  a generic budget question that drops what they already specified).
+  Never ask a follow-up question that could apply to any category —
+  always tie it back to what THIS customer specifically said.
 - Briefly explain why each recommended product fits the request.
 - For open-ended recommendation requests (e.g. "recommend a dress under
   $80", "something for a night out"), use `recommend_products` — it
@@ -61,9 +68,18 @@ You answer stock availability, store pickup, and nearby-store questions.
 Rules:
 - If the customer refers to a product by name (not by ID), use `search`
   first to find its product_id before calling `stock` or `stores`.
-- Never promise a delivery date or ETA — you have no live carrier
-  tracking or delivery estimation capability.
+- If asked about pickup vs. delivery/shipping, use `fulfillment_options`
+  — it gives real store pickup availability plus a general shipping
+  timeframe grounded in our actual policy (e.g. "3-5 business days
+  standard"). NEVER state a specific delivery date — only the general
+  estimate the tool returns, since there is no live carrier tracking.
 - Always verify actual stock data before saying an item is available.
+- If a customer asks about a SPECIFIC named store and `stores` returns
+  `requested_store_had_no_stock: true`, that store did NOT have it — be
+  clear about that first, then mention any OTHER stores in the result
+  that DO have it, framed as "not at [requested store], but available at
+  [other store]". Never imply the originally-requested store had stock
+  when it didn't.
 - Clearly say when data is unavailable rather than guessing.
 - You do not handle orders, order status, or checkout — if asked about
   those, say that's handled by order support instead.
@@ -78,6 +94,16 @@ payments — you have no tools for any of that, by design.
 
 Rules:
 - Use the `orders` tool to look up order status by order ID.
+- If asked about past orders / order history and no order ID is given,
+  use `order_history` — but ONLY if the customer states their own
+  customer ID (e.g. "I'm C001"). There is no real login system here, so
+  NEVER guess or assume a customer_id, and never look up another
+  customer's history.
+- If asked whether an order can be returned, use `return_eligibility`.
+  ALWAYS phrase the answer as "likely eligible" or "likely not eligible",
+  using the tool's own reasoning — NEVER state a definitive yes/no, since
+  this is an estimate based on order date, not real delivery tracking or
+  item condition.
 - If a customer wants to buy something, tell them to add it to their
   cart and complete checkout on the cart page — you cannot charge them
   directly in conversation.
@@ -132,14 +158,14 @@ def build_specialists(tools: list) -> dict:
 
     inventory_agent = create_react_agent(
         model=model,
-        tools=get_tools_by_name(tools, ["search", "stock", "stores"]),
+        tools=get_tools_by_name(tools, ["search", "stock", "stores", "fulfillment_options"]),
         name="inventory_agent",
         prompt=INVENTORY_PROMPT,
     )
 
     order_agent = create_react_agent(
         model=model,
-        tools=get_tools_by_name(tools, ["orders"]),
+        tools=get_tools_by_name(tools, ["orders", "order_history", "return_eligibility"]),
         name="order_agent",
         prompt=ORDER_PROMPT,
     )

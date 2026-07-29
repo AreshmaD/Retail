@@ -8,6 +8,18 @@ from scout.agents.tools_loader import MCPToolManager
 from scout.agents.specialists import build_specialists
 from scout.agents.intent_splitter import split_intents, merge_answers
 from scout.agents.tool_guard import reset_guard
+
+MAX_HISTORY_MESSAGES = 12  # only the most recent N messages get sent to
+# the model per call — full history is still stored/returned to the
+# caller, this only trims what's actually transmitted as input tokens.
+# 12 is enough for the multi-turn memory tests (2-3 turn conversations,
+# ~2 messages per turn) while capping cost on long sessions.
+
+
+def _trim_history_for_model(history: list[dict]) -> list[dict]:
+    if len(history) <= MAX_HISTORY_MESSAGES:
+        return history
+    return history[-MAX_HISTORY_MESSAGES:]
 from scout.agents.verification import verify_price_grounding
 
 SPECIALIST_NAMES = {
@@ -28,8 +40,13 @@ exactly one specialist:
 - recommend_agent: open-ended product recommendations, semantic search,
   ranking, promotions
 - inventory_agent: stock checks, store pickup, nearby store availability
-- order_agent: order status and tracking lookup (read-only — cannot
-  create, modify, or pay for orders)
+- order_agent: order status, tracking, order history, and RETURN
+  ELIGIBILITY FOR A SPECIFIC ORDER (read-only — cannot create, modify, or
+  pay for orders). If the customer mentions a specific order ID (like
+  "O1001") alongside a question about returning/refunding it, that is
+  order_agent's job, NOT policy_agent's — even though the word "return"
+  appears. policy_agent is only for GENERAL policy questions with no
+  specific order mentioned (e.g. "what's your return policy?").
 - external_offer_agent: ONLY when the customer wants a product that isn't
   in our own inventory and they want a third-party alternative — hand off
   here specifically for that case, not for general recommendations
@@ -246,7 +263,7 @@ async def _run_single_intent(app, history: list[dict], sub_intent: str, debug: b
     # unrelated later answers (e.g. shoes).
     messages_before = len(history)
     history.append({"role": "user", "content": sub_intent})
-    result = await app.ainvoke({"messages": history}, config={"recursion_limit": 15})
+    result = await app.ainvoke({"messages": _trim_history_for_model(history)}, config={"recursion_limit": 15})
     new_messages = result["messages"][messages_before:]
 
     if debug:
@@ -298,7 +315,7 @@ async def _run_single_intent(app, history: list[dict], sub_intent: str, debug: b
         messages_before_correction = len(history)
         history.append({"role": "user", "content": correction_note})
         correction_result = await app.ainvoke(
-            {"messages": history}, config={"recursion_limit": 15}
+            {"messages": _trim_history_for_model(history)}, config={"recursion_limit": 15}
         )
         new_correction_messages = correction_result["messages"][messages_before_correction:]
 
@@ -453,7 +470,7 @@ async def _run_single_intent_streaming(app, history: list[dict], sub_intent: str
         messages_before_correction = len(history)
         history.append({"role": "user", "content": correction_note})
         correction_result = await app.ainvoke(
-            {"messages": history}, config={"recursion_limit": 15}
+            {"messages": _trim_history_for_model(history)}, config={"recursion_limit": 15}
         )
         new_correction_messages = correction_result["messages"][messages_before_correction:]
         corrected_reply = get_final_reply(new_correction_messages)

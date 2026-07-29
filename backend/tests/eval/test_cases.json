@@ -65,10 +65,10 @@
   },
   {
     "id": "TC-09",
-    "description": "Checkout via agent",
+    "description": "Checkout via agent — POST-PHASE-1: agent has no checkout tool at all, must redirect to cart rather than confirm/process a payment directly",
     "query": "I'd like to buy the Black Midi Dress, charge me for it.",
     "expect_products": false,
-    "must_contain_any": ["confirm", "$79.99", "total", "proceed"],
-    "must_not_contain": []
+    "must_contain_any": ["cart", "checkout page", "can't", "cannot", "unable"],
+    "must_not_contain": ["payment complete", "order confirmed", "charged", "payment successful"]
   }
 ]
