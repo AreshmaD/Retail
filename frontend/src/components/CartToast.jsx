@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import "./CartToast.css";
@@ -19,15 +19,16 @@ export default function CartToast() {
 
   // Close and, for explicit user-initiated closes, return focus to the
   // button that opened the toast (e.g. the "Add to cart" button clicked).
-  function closeToast({ returnFocus } = { returnFocus: true }) {
+  const closeToast = useCallback(({ returnFocus } = { returnFocus: true }) => {
     setVisible(false);
     if (returnFocus && triggerElementRef?.current) {
       triggerElementRef.current.focus();
     }
-  }
+  }, [triggerElementRef]);
 
   useEffect(() => {
     if (notifyId === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVisible(true);
     // Auto-dismiss after 4s. Not treated as a user-initiated close, so
     // we don't forcibly move focus back — the user may already be doing
@@ -41,7 +42,7 @@ export default function CartToast() {
     if (visible) {
       closeButtonRef.current?.focus();
     }
-  }, [visible]);
+  }, [visible, closeToast]);
 
   // Close on Escape key.
   useEffect(() => {
@@ -53,7 +54,7 @@ export default function CartToast() {
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [visible]);
+  }, [visible, closeToast]);
 
   // Close on outside click.
   useEffect(() => {
@@ -65,7 +66,7 @@ export default function CartToast() {
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [visible]);
+  }, [visible, closeToast]);
 
   if (!visible || !lastAdded) return null;
 

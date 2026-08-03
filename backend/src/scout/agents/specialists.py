@@ -1,4 +1,4 @@
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 
 from scout.agents.model_provider import get_chat_model, with_no_think
 from scout.agents.tools_loader import get_tools_by_name
@@ -145,41 +145,64 @@ Rules:
 """)
 
 
+def create_specialist_agent(*, model, tools, name: str, prompt: str):
+    return create_agent(
+        model=model,
+        tools=tools,
+        name=name,
+        system_prompt=prompt,
+    )
+
+
 def build_specialists(tools: list) -> dict:
-    tools = wrap_tools_with_guard(tools)
     model = get_chat_model()
 
-    recommend_agent = create_react_agent(
+    recommend_agent = create_specialist_agent(
         model=model,
-        tools=get_tools_by_name(tools, ["recommend_products", "search", "stock", "alternatives"]),
+        tools=wrap_tools_with_guard(
+            get_tools_by_name(tools, ["recommend_products", "search", "stock", "alternatives"]),
+            agent_name="recommend_agent",
+        ),
         name="recommend_agent",
         prompt=RECOMMEND_PROMPT,
     )
 
-    inventory_agent = create_react_agent(
+    inventory_agent = create_specialist_agent(
         model=model,
-        tools=get_tools_by_name(tools, ["search", "stock", "stores", "fulfillment_options"]),
+        tools=wrap_tools_with_guard(
+            get_tools_by_name(tools, ["search", "stock", "stores", "fulfillment_options"]),
+            agent_name="inventory_agent",
+        ),
         name="inventory_agent",
         prompt=INVENTORY_PROMPT,
     )
 
-    order_agent = create_react_agent(
+    order_agent = create_specialist_agent(
         model=model,
-        tools=get_tools_by_name(tools, ["orders", "order_history", "return_eligibility"]),
+        tools=wrap_tools_with_guard(
+            get_tools_by_name(tools, ["orders", "order_history", "return_eligibility"]),
+            agent_name="order_agent",
+        ),
         name="order_agent",
         prompt=ORDER_PROMPT,
     )
 
-    external_offer_agent = create_react_agent(
+    external_offer_agent = create_specialist_agent(
         model=model,
-        tools=get_tools_by_name(tools, ["search_external_offers"]),
+        tools=wrap_tools_with_guard(
+            get_tools_by_name(tools, ["search_external_offers"]),
+            agent_name="external_offer_agent",
+        ),
         name="external_offer_agent",
         prompt=EXTERNAL_OFFER_PROMPT,
     )
 
-    policy_agent = create_react_agent(
+    policy_agent = create_specialist_agent(
         model=model,
-        tools=get_tools_by_name(tools, ["retrieve_policy_chunks"]),
+        tools=wrap_tools_with_guard(
+            get_tools_by_name(tools, ["retrieve_policy_chunks"]),
+            agent_name="policy_agent",
+        ),
         name="policy_agent",
         prompt=POLICY_PROMPT,
     )

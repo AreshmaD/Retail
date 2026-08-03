@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { streamChatMessage } from "../api/client";
 import { useChatWidget } from "../context/ChatWidgetContext";
 import ProductCard from "./ProductCard";
@@ -44,10 +45,14 @@ function CompareIcon() {
 }
 
 const STARTER_PROMPTS = [
-  { text: "Shoes for standing all day", Icon: ShoeIcon },
-  { text: "Find a dress under $100", Icon: DressIcon },
-  { text: "Check store availability", Icon: StoreIcon },
-  { text: "Compare similar products", Icon: CompareIcon },
+  { text: "Recommend a dress under $80", Icon: DressIcon },
+  { text: "Is the black midi dress in a medium?", Icon: StoreIcon },
+  { text: "Where is order O1001?", Icon: CompareIcon },
+  {
+    text: "Recommend a black dress under $80, check Maple Grove medium availability, and explain opened-item returns.",
+    Icon: DressIcon,
+  },
+  { text: "Do you have any red cocktail dresses under $50?", Icon: ShoeIcon },
 ];
 
 // Maps real backend progress event values to human-readable labels.
@@ -62,6 +67,7 @@ const PROGRESS_LABELS = {
 
 export default function ChatWidget() {
   const { isOpen, setIsOpen, prefillMessage, prefillNonce } = useChatWidget();
+  const location = useLocation();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [sessionId, setSessionId] = useState(null);
@@ -72,6 +78,7 @@ export default function ChatWidget() {
   const [lastFailedMessage, setLastFailedMessage] = useState(null);
   const messagesEndRef = useRef(null);
   const panelRef = useRef(null);
+  const isProductPage = location.pathname.startsWith("/product/");
 
   useEffect(() => {
     if (isOpen) {
@@ -81,6 +88,7 @@ export default function ChatWidget() {
 
   useEffect(() => {
     if (prefillMessage) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setInput(prefillMessage);
     }
   }, [prefillNonce]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -123,7 +131,7 @@ export default function ChatWidget() {
           ]);
           setProgressSteps([]);
         },
-        onError: (err) => {
+        onError: () => {
           gotAnyEvent = true;
           setMessages((prev) => [
             ...prev,
@@ -179,13 +187,39 @@ export default function ChatWidget() {
         onClick={() => setIsOpen(true)}
         aria-label="Open shopping assistant"
       >
-        💬
+        <svg
+          className="chat-widget-bubble-icon"
+          width="26"
+          height="26"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M5.5 17.5c-1.35-1.25-2-2.92-2-5 0-4.42 3.8-8 8.5-8s8.5 3.58 8.5 8-3.8 8-8.5 8c-1.05 0-2.05-.18-2.96-.52L5 20.5l.5-3z"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M8.5 12.25h.01M12 12.25h.01M15.5 12.25h.01"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
+        </svg>
       </button>
     );
   }
 
   return (
-    <div className="chat-widget-panel" ref={panelRef} role="dialog" aria-label="Scout shopping assistant">
+    <div
+      className={`chat-widget-panel ${isProductPage ? "chat-widget-panel--product-page" : ""}`}
+      ref={panelRef}
+      role="dialog"
+      aria-label="Scout shopping assistant"
+    >
       <header className="chat-widget-header">
         <div className="chat-widget-header-titles">
           <span className="chat-widget-title">Scout Shopping Assistant</span>

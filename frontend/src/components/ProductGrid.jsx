@@ -9,6 +9,7 @@ export default function ProductGrid({ category = null, query = null, limit = 50 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     const params = new URLSearchParams({ limit: String(limit) });
     if (category) params.set("category", category);

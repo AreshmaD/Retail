@@ -21,6 +21,7 @@ export default function CartPage() {
   const [confirmation, setConfirmation] = useState(null);
   const [error, setError] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
+  const shippingLabel = total >= 75 ? "Free" : "Free over $75";
 
   useEffect(() => {
     if (searchParams.get("checkout") === "1" && items.length > 0 && !checkoutSession && !confirmation) {
@@ -54,7 +55,7 @@ export default function CartPage() {
         clientSecret: data.payment.client_secret,
         order: data.order,
       });
-    } catch (err) {
+    } catch {
       setError("Something went wrong starting checkout. Please try again.");
     } finally {
       setIsStartingCheckout(false);
@@ -89,14 +90,25 @@ export default function CartPage() {
   if (checkoutSession) {
     return (
       <div className="cart-page">
-        <h2 className="cart-title">Payment</h2>
-        <p style={{ fontSize: "13px", color: "var(--color-text-secondary)", marginBottom: "16px" }}>
-          Order total: ${checkoutSession.order.total.toFixed(2)} — use test card 4242 4242 4242 4242,
-          any future expiry, any CVC.
-        </p>
-        <Elements stripe={stripePromise} options={{ clientSecret: checkoutSession.clientSecret }}>
-          <CheckoutForm onSuccess={handlePaymentSuccess} />
-        </Elements>
+        <div className="cart-payment-card">
+          <p className="cart-eyebrow">Secure checkout</p>
+          <h2 className="cart-title">Complete your order</h2>
+          <p className="cart-payment-note">
+            Your payment is handled by Stripe Elements outside the AI assistant path.
+          </p>
+          <div className="cart-payment-summary">
+            <span>Order total</span>
+            <strong>${checkoutSession.order.total.toFixed(2)}</strong>
+          </div>
+          <div className="cart-demo-card-note">
+            <span>Demo mode</span>
+            <code>4242 4242 4242 4242</code>
+            <small>Use any future expiry and any CVC.</small>
+          </div>
+          <Elements stripe={stripePromise} options={{ clientSecret: checkoutSession.clientSecret }}>
+            <CheckoutForm onSuccess={handlePaymentSuccess} />
+          </Elements>
+        </div>
       </div>
     );
   }
@@ -104,7 +116,9 @@ export default function CartPage() {
   if (items.length === 0) {
     return (
       <div className="cart-empty">
-        <p>Your cart is empty.</p>
+        <div className="cart-empty-icon" aria-hidden="true">🛒</div>
+        <h2>Your cart is empty</h2>
+        <p>Find something you love, then Scout will keep checkout secure and deterministic.</p>
         <Link to="/" className="cart-empty-link">Continue shopping</Link>
       </div>
     );
@@ -112,70 +126,102 @@ export default function CartPage() {
 
   return (
     <div className="cart-page">
-      <h2 className="cart-title">Your Cart</h2>
-
-      <div className="cart-items">
-        {items.map((item) => (
-          <div key={item.product_id} className="cart-item">
-            <img className="cart-item-image" src={resolveImageUrl(item.image_url)} alt={item.name} />
-
-            <div className="cart-item-details">
-              <p className="cart-item-brand">{item.brand}</p>
-              <p className="cart-item-name">{item.name}</p>
-              <p className="cart-item-price">${item.price.toFixed(2)}</p>
-            </div>
-
-            <div className="cart-item-qty">
-              <button
-                className="cart-qty-btn"
-                onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
-              >
-                −
-              </button>
-              <span className="cart-qty-value">{item.quantity}</span>
-              <button
-                className="cart-qty-btn"
-                onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
-              >
-                +
-              </button>
-            </div>
-
-            <p className="cart-item-subtotal">
-              ${(item.price * item.quantity).toFixed(2)}
-            </p>
-
-            <button
-              className="cart-item-remove"
-              onClick={() => removeFromCart(item.product_id)}
-              aria-label="Remove item"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
+      <div className="cart-header">
+        <p className="cart-eyebrow">Shopping bag</p>
+        <h2 className="cart-title">Your Cart</h2>
+        <p className="cart-subtitle">
+          {items.length} {items.length === 1 ? "item" : "items"} ready for secure checkout.
+        </p>
       </div>
 
-      {error && <p className="cart-error">{error}</p>}
+      <div className="cart-layout">
+        <div className="cart-items-panel">
+          <div className="cart-items">
+            {items.map((item) => (
+              <div key={item.product_id} className="cart-item">
+                <img className="cart-item-image" src={resolveImageUrl(item.image_url)} alt={item.name} />
 
-      <div className="cart-summary">
-        <button className="cart-clear-btn" onClick={clearCart}>
-          Clear cart
-        </button>
+                <div className="cart-item-details">
+                  <p className="cart-item-brand">{item.brand}</p>
+                  <p className="cart-item-name">{item.name}</p>
+                  <p className="cart-item-price">${item.price.toFixed(2)}</p>
+                  <p className="cart-item-note">Options confirmed during checkout</p>
+                </div>
 
-        <div className="cart-total-row">
-          <span>Total</span>
-          <span className="cart-total-value">${total.toFixed(2)}</span>
+                <div className="cart-item-qty" aria-label={`Quantity for ${item.name}`}>
+                  <button
+                    className="cart-qty-btn"
+                    onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
+                    aria-label={`Decrease quantity for ${item.name}`}
+                  >
+                    −
+                  </button>
+                  <span className="cart-qty-value">{item.quantity}</span>
+                  <button
+                    className="cart-qty-btn"
+                    onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
+                    aria-label={`Increase quantity for ${item.name}`}
+                  >
+                    +
+                  </button>
+                </div>
+
+                <p className="cart-item-subtotal">
+                  ${(item.price * item.quantity).toFixed(2)}
+                </p>
+
+                <button
+                  className="cart-item-remove"
+                  onClick={() => removeFromCart(item.product_id)}
+                  aria-label={`Remove ${item.name}`}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <button className="cart-clear-btn" onClick={clearCart}>
+            Clear cart
+          </button>
         </div>
 
-        <button
-          className="cart-checkout-btn"
-          onClick={handleStartCheckout}
-          disabled={isStartingCheckout}
-        >
-          {isStartingCheckout ? "Starting…" : "Proceed to checkout"}
-        </button>
-      </div>
+        <aside className="cart-summary" aria-label="Order summary">
+          <h3>Order summary</h3>
+          <div className="cart-summary-row">
+            <span>Subtotal</span>
+            <span>${total.toFixed(2)}</span>
+          </div>
+          <div className="cart-summary-row">
+            <span>Shipping</span>
+            <span>{shippingLabel}</span>
+          </div>
+          <div className="cart-summary-row">
+            <span>Estimated tax</span>
+            <span>Calculated at checkout</span>
+          </div>
+          <div className="cart-total-row">
+            <span>Estimated total</span>
+            <span className="cart-total-value">${total.toFixed(2)}</span>
+          </div>
+
+          {error && <p className="cart-error">{error}</p>}
+
+          <button
+            className="cart-checkout-btn"
+            onClick={handleStartCheckout}
+            disabled={isStartingCheckout}
+          >
+            {isStartingCheckout ? "Starting…" : "Proceed to checkout"}
+          </button>
+
+          <div className="cart-summary-trust">
+            <span>Secure payment powered by Stripe</span>
+            <span>Stock and price verified server-side</span>
+            <span>30-day returns on eligible items</span>
+          </div>
+        </aside>
+        </div>
     </div>
   );
 }

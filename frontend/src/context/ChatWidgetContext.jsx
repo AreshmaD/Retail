@@ -26,6 +26,7 @@ export function ChatWidgetProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useChatWidget() {
   const ctx = useContext(ChatWidgetContext);
   if (!ctx) {

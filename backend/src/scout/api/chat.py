@@ -13,6 +13,7 @@ router = APIRouter()
 # Dev-only simplification — resets on restart, doesn't scale across
 # multiple server processes.
 SESSION_HISTORIES: dict[str, list[dict]] = {}
+SESSION_CONTEXTS: dict[str, dict] = {}
 
 
 class ChatRequest(BaseModel):
@@ -30,11 +31,18 @@ class ChatResponse(BaseModel):
 async def chat(request: Request, body: ChatRequest) -> ChatResponse:
     session_id = body.session_id or str(uuid.uuid4())
     history = SESSION_HISTORIES.get(session_id, [])
+    conversation_context = SESSION_CONTEXTS.get(session_id, {})
 
     supervisor_app = request.app.state.supervisor_app
-    reply, updated_history, products = await ask(supervisor_app, history, body.message)
+    reply, updated_history, products = await ask(
+        supervisor_app,
+        history,
+        body.message,
+        conversation_context=conversation_context,
+    )
 
     SESSION_HISTORIES[session_id] = updated_history
+    SESSION_CONTEXTS[session_id] = conversation_context
 
     return ChatResponse(session_id=session_id, reply=reply, products=products)
 
@@ -51,6 +59,7 @@ async def chat_stream(request: Request, body: ChatRequest):
     /chat endpoint uses via ask()."""
     session_id = body.session_id or str(uuid.uuid4())
     history = SESSION_HISTORIES.get(session_id, [])
+    conversation_context = SESSION_CONTEXTS.get(session_id, {})
 
     supervisor_app = request.app.state.supervisor_app
 
@@ -58,18 +67,24 @@ async def chat_stream(request: Request, body: ChatRequest):
         yield {"event": "session", "data": session_id}
 
         try:
-            async for kind, payload in ask_streaming(supervisor_app, history, body.message):
+            async for kind, payload in ask_streaming(
+                supervisor_app,
+                history,
+                body.message,
+                conversation_context=conversation_context,
+            ):
                 if kind == "progress":
                     yield {"event": "progress", "data": payload}
                 else:
                     reply_text, products = payload
                     SESSION_HISTORIES[session_id] = history
+                    SESSION_CONTEXTS[session_id] = conversation_context
                     yield {
                         "event": "done",
                         "data": json.dumps({"reply": reply_text, "products": products}),
                     }
-        except Exception as e:
-            yield {"event": "error", "data": str(e)}
+        except Exception:
+            yield {"event": "error", "data": "Something went wrong processing that request."}
             return
 
     return EventSourceResponse(event_generator())

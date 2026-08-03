@@ -18,7 +18,13 @@ def get_chat_model():
         )
 
     from langchain_ollama import ChatOllama
-    return ChatOllama(model=settings.OLLAMA_MODEL, base_url=settings.OLLAMA_BASE_URL)
+    return ChatOllama(
+        model=settings.OLLAMA_MODEL,
+        base_url=settings.OLLAMA_BASE_URL,
+        client_kwargs={"timeout": settings.MODEL_INVOCATION_TIMEOUT_SECONDS},
+        async_client_kwargs={"timeout": settings.MODEL_INVOCATION_TIMEOUT_SECONDS},
+        sync_client_kwargs={"timeout": settings.MODEL_INVOCATION_TIMEOUT_SECONDS},
+    )
 
 
 def with_no_think(prompt: str) -> str:

@@ -175,15 +175,16 @@ def _real_vendor_link(domain: str, product_name: str) -> str:
 
 
 EXTERNAL_PRODUCTS = [
-    # Verified real, specific, currently-live product page:
-    ("EX001", "Ruched Midi Dress", "Nordstrom Rack", "dresses", 74.00, 4.2,
-     "black,formal,evening",
-     "https://www.nordstromrack.com/s/nordstrom-rack-ruched-midi-dress/8617850"),
-
     # Verified real, live category pages (real products, not pinned to one SKU
     # — matches how a live affiliate feed would surface current in-stock items):
     ("EX003", "Running Shoe", "Zappos", "shoes", 69.00, 4.4,
-     "running,athletic", "https://www.zappos.com/mens-running-shoes"),
+     "use:running,attr:athletic,waterproof:false,availability:in_stock,subcategory:running shoes",
+     "https://www.zappos.com/mens-running-shoes"),
+
+    # Synthetic/demo structured external offer for deterministic validation.
+    ("EX010", "TrailGuard Waterproof Hiking Shoe", "Outdoor Demo Retailer", "shoes", 64.99, 4.4,
+     "use:hiking,attr:waterproof,attr:trail,waterproof:true,color:black,availability:in_stock,subcategory:hiking shoes",
+     "https://example.com/outdoor-demo/trailguard-waterproof-hiking-shoe"),
 
     # Verified real, specific, currently-live, IN-STOCK product page:
     ("EX002", "Florine Dress", "Shopbop", "dresses", 218.50, 4.0,
@@ -200,21 +201,30 @@ EXTERNAL_PRODUCTS = [
     ("EX008", "Stretch Skinny Jean", "Old Navy", "bottoms", 44.00, 4.1,
      "denim,casual", _real_vendor_link("oldnavy.gap.com", "skinny jean")),
 
+    # Verified real, specific, currently-live product page:
+    ("EX011", "Enid Satin Body-Con Evening Dress", "Nordstrom Rack", "dresses", 35.98, 4.1,
+     "red,cocktail,party,evening",
+     "https://www.nordstromrack.com/s/petal-and-pup-enid-satin-body-con-evening-dress/8336558",
+     "https://n.nordstrommedia.com/it/e6ad6561-d8a8-4c3f-82c5-d10f5bf0c02d.jpeg?h=368&w=240&dpr=2"),
+
     # Verified real, specific, currently in-stock product page:
     ("EX009", "Twist-Front Midi Dress", "Target", "dresses", 45.00, 3.4,
      "casual,everyday",
-     "https://www.target.com/p/women-39-s-twist-front-midi-dress-a-new-day-8482-blue-gingham-check-xs/-/A-95300205"),
+     "https://www.target.com/p/women-39-s-twist-front-midi-dress-a-new-day-8482-blue-gingham-check-xs/-/A-95300205",
+     "https://target.scene7.com/is/image/Target/GUEST_ed571594-9abb-45e3-b052-0aee6e49a634?wid=600&hei=600&qlt=80&fmt=pjpeg"),
 ]
 
 
 def seed_external_products(session) -> None:
     if session.query(ExternalProduct).first():
         return
-    for ex_id, name, vendor, category, price, rating, tags, link in EXTERNAL_PRODUCTS:
+    for external_product in EXTERNAL_PRODUCTS:
+        ex_id, name, vendor, category, price, rating, tags, link, *image_values = external_product
+        image_url = image_values[0] if image_values else ""
         session.add(ExternalProduct(
             external_product_id=ex_id, name=name, vendor_name=vendor,
             category=category, price=price, rating=rating, tags=tags,
-            image_url=f"https://picsum.photos/seed/{ex_id}/400/500",
+            image_url=image_url,
             affiliate_link_template=link,
         ))
     session.commit()

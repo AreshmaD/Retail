@@ -296,9 +296,10 @@
 }
 
 .layout-content {
-  width: min(100% - 48px, 1440px);
+  width: min(calc(100% - 48px), 1440px);
   margin: 0 auto;
   padding: 24px 28px;
+  box-sizing: border-box;
 }
 
 /* Responsive: collapse text labels on small screens, keep icons + cart count visible */
@@ -337,6 +338,7 @@
   }
 
   .layout-content {
+    width: 100%;
     padding: 20px 14px;
   }
 }
@@ -410,6 +412,20 @@
 
 /* Tablet: hide descriptions first, keep icon + label */
 @media (max-width: 900px) {
+  .layout-header {
+    flex-wrap: wrap;
+  }
+
+  .layout-search {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .layout-header-actions {
+    margin-left: auto;
+  }
+
   .layout-trust-desc {
     display: none;
   }

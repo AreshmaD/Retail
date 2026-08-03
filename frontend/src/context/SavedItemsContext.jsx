@@ -75,6 +75,7 @@ export function SavedItemsProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useSavedItems() {
   const ctx = useContext(SavedItemsContext);
   if (!ctx) {

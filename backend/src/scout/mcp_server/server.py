@@ -59,7 +59,17 @@ def search(
 
 
 @mcp.tool()
-def search_external_offers(category: str = "", max_price: Union[str, float] = 0) -> list[dict]:
+def search_external_offers(
+    query: str = "",
+    category: str = "",
+    subcategory: str = "",
+    use_case: str = "",
+    required_attributes: str = "",
+    waterproof: Union[str, bool, None] = None,
+    color: str = "",
+    budget_max: Union[str, float] = 0,
+    max_price: Union[str, float] = 0,
+) -> dict:
     """MOCK DATA: searches a third-party vendor catalog for products in a
     category, optionally under a max price. Use this when the internal
     `search` tool returns no in-stock results. Each result includes a
@@ -71,15 +81,57 @@ def search_external_offers(category: str = "", max_price: Union[str, float] = 0)
     try:
         results = find_external_alternative(
             session,
+            query=query,
             category=category,
-            max_price=_to_float(max_price) or None,
+            subcategory=subcategory or None,
+            use_case=use_case or None,
+            required_attributes=required_attributes,
+            waterproof=_to_bool_or_none(waterproof),
+            color=color or None,
+            budget_max=_to_float(budget_max) or _to_float(max_price) or None,
         )
-        for r in results:
-            r["source"] = "external"
-            r["click_url"] = f"/affiliate/click/{r['external_product_id']}"
-        return results
+        if not results:
+            return {
+                "matches": [],
+                "items": [],
+                "match_count": 0,
+                "message": "No verified external offer matched all requested constraints.",
+                "filters": {
+                    "query": query,
+                    "category": category,
+                    "subcategory": subcategory,
+                    "use_case": use_case,
+                    "required_attributes": required_attributes,
+                    "waterproof": _to_bool_or_none(waterproof),
+                    "color": color,
+                    "budget_max": _to_float(budget_max) or _to_float(max_price) or None,
+                },
+            }
+        return {
+            "matches": results,
+            "items": results,
+            "match_count": len(results),
+            "filters": {
+                "query": query,
+                "category": category,
+                "subcategory": subcategory,
+                "use_case": use_case,
+                "required_attributes": required_attributes,
+                "waterproof": _to_bool_or_none(waterproof),
+                "color": color,
+                "budget_max": _to_float(budget_max) or _to_float(max_price) or None,
+            },
+        }
     finally:
         session.close()
+
+
+def _to_bool_or_none(value) -> bool | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _filter_to_majority_category(session, candidate_ids: list[str]) -> list[str]:

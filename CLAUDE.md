@@ -40,18 +40,21 @@ Both lanes call the same underlying `services/*.py` functions for reads — one 
 - `vector_store.py` — Chroma `policy_docs` collection at `data/chroma/`, built from markdown files in `data/policies/` (`returns.md`, `refunds.md`, `shipping.md`, `exchanges.md`) via `RecursiveCharacterTextSplitter` + Ollama's `nomic-embed-text`. Rebuild with `python3 src/scout/rag/vector_store.py` — **must be re-run whenever policy docs change**, not automatic.
 - `product_embeddings.py` — separate Chroma `product_catalog` collection at `data/chroma_products/`, semantic search over the product catalog. Rebuild with `python3 src/scout/rag/product_embeddings.py` — **must be re-run whenever new products are added**.
 
-### MCP server (`mcp_server/server.py`) — 11 tools, confirmed via `grep "^@mcp.tool()"`
+### Local Scout MCP server (`mcp_server/server.py`) — 11 approved read tools, confirmed via `grep "^@mcp.tool()"`
 `search`, `search_external_offers`, `recommend_products`, `stock`, `alternatives`, `fulfillment_options`, `stores`, `order_history`, `return_eligibility`, `orders`, `retrieve_policy_chunks`.
 
-**No checkout, cancel_order, or refund tool exists — not disabled, never written.** This is the structural security boundary. See "Security boundaries" below for the reasoning.
+**No checkout, cancel_order, refund, payment, SQL, shell, unrestricted HTTP, order-mutation, or inventory-mutation tool exists in the local Scout MCP registry — not disabled, never written there.** `MCPToolManager` also has a raw Stripe MCP client configured, but the five specialists receive only code-selected allowlisted Scout tools via `get_tools_by_name()`. The enforced agentic boundary is the specialist allowlists, not an assumption that no payment-capable tool could exist anywhere in the raw runtime.
 
 ### Agents (`agents/`)
-- `config.py` — `MODEL_PROVIDER` (groq/claude/gemini/ollama), model names, API keys, all four genuinely wired and tested.
+- `src/scout/config.py` — `MODEL_PROVIDER` (groq/claude/gemini/ollama), model names, API keys, all four genuinely wired and tested.
 - `model_provider.py` — `get_chat_model()` supporting all 4 providers; `with_no_think()` for Ollama only.
 - `tools_loader.py` — `MCPToolManager`, `get_tools_by_name()`.
 - `tool_guard.py` — `wrap_tools_with_guard()`, `reset_guard(max_total_calls=10, max_identical_calls=1)` — called fresh per sub-intent.
 - `intent_splitter.py` — `split_intents()`, `merge_answers()`. Runs **outside** the LangGraph graph, before it's invoked.
-- `verification.py` — `verify_price_grounding(reply, products, customer_message="")`. Deterministic regex + set comparison. Checks mentioned dollar amounts against: real tool-returned prices/promotions, the customer's own stated budget (to avoid a false-positive on restated budgets), and `KNOWN_POLICY_PRICES = {"0.00", "5.99", "14.99", "75.00"}` (shipping fees/thresholds — added after this exact gate flagged its own legitimate policy numbers as "unverified," a real bug found via dogfooding). **Scope: price grounding only** — product identity, promotion authenticity, stock/store claims rely on prompt-level anti-hallucination rules, not this deterministic check. This is a known, honest limitation, not an oversight.
+- `evidence.py` — Pydantic sidecar schemas and contextvar collector for `EvidenceEntry`, `ToolCallRecord`, `ProposedClaim`, `RejectedClaim`, and `VerificationResult`. Tool calls record sanitized arguments and normalized JSON-compatible facts only; secrets/credentials are redacted and raw tool responses/prompts are not persisted.
+- `claims.py` — deterministic `propose_claims()` over the final candidate reply, structured products, and current sub-intent evidence. It emits only explicit Scout-domain claim types (product, inventory, store, fulfillment, order, policy, external offer), with linked evidence IDs when available.
+- `verification.py` — keeps `verify_price_grounding(reply, products, customer_message="")` as defense-in-depth for dollar amounts, and adds broad deterministic `verify_claims()` for `ProposedClaim` objects. Claims are approved only when linked successful current-sub-intent evidence supports the subject, field, value, and domain. Stable rejection codes drive internal diagnostics and the bounded correction decision.
+- `rendering.py` — deterministic approved-only renderer. Customer-facing factual replies and chat product cards are rebuilt from approved claims, not edited from model prose. Original model text is preserved only for narrow non-factual conversational replies (e.g. a safe thanks/clarification). A final safety scan removes unsupported factual values before output.
 - `specialists.py` — `build_specialists(tools)`, returns dict of 5 `create_react_agent` agents. Each has a `CONVERSATIONAL_TONE` block prepended to its prompt (added after a review found replies read too templated — "vary phrasing, acknowledge what the customer already said before asking a follow-up").
   - `recommend_agent`: tools `[recommend_products, search, stock, alternatives]`. Emits exact string `"NEEDS_EXTERNAL_CHECK: <request>"` when nothing genuinely matches a stated attribute (never presents a partial/wrong-attribute match as satisfying the request).
   - `inventory_agent`: tools `[search, stock, stores, fulfillment_options]`.
@@ -59,15 +62,15 @@ Both lanes call the same underlying `services/*.py` functions for reads — one 
   - `external_offer_agent`: tools `[search_external_offers]`.
   - `policy_agent`: tools `[retrieve_policy_chunks]`.
 - `supervisor.py` — the orchestration core.
-  - `MAX_HISTORY_MESSAGES = 12`, `_trim_history_for_model()` — caps what's sent to the model per call (added after profiling found unbounded history, not prompt size, was the real token-cost driver). **Known gap:** applied at 3 of the 4 `ainvoke`/`astream_events` call sites; the *first* call in the streaming path (`ask_stream`, the SSE generator) currently sends raw untrimmed `history` — a one-line fix not yet applied (wrap it with `_trim_history_for_model()`, same as the other 3 sites).
+  - `MAX_HISTORY_MESSAGES = 12`, `_trim_history_for_model()` — caps what's sent to the model per call (added after profiling found unbounded history, not prompt size, was the real token-cost driver). Applied to the non-streaming graph calls and the first streaming `astream_events` call, while full session history remains stored in memory.
   - `build_supervisor_app()` — builds via `create_supervisor` (langgraph_supervisor), 5 specialists.
   - Supervisor prompt: `SPECIALIST_NAMES`, mandatory rule that on seeing `"NEEDS_EXTERNAL_CHECK"` it MUST call `transfer_to_external_offer_agent` as its only action — no commentary. Also has an explicit exception: pure conversation-closing messages ("thanks, that's all!") get a direct warm reply from the supervisor instead of a pointless hand-off. Also has a routing clarification: an order ID mentioned alongside "return" routes to `order_agent` (not `policy_agent`) — added after a real bug where this misrouted.
   - `get_final_reply()` — filters out handoff markers and any stray `NEEDS_EXTERNAL_CHECK` text as a safety net; also accepts the supervisor's own direct reply when no specialist responded at all this turn (for the closing-message exception above).
   - `extract_products()` / `_parse_json_blocks()` — recursive flattener handling Claude's string-encoded nested tool-result shape vs Groq/Ollama/Gemini's flatter shape (a real cross-provider bug found and fixed).
   - `had_external_handoff` filtering — after a `NEEDS_EXTERNAL_CHECK` handoff, only returns `source == "external"` products, discarding the abandoned internal near-miss attempt (fixes a real bug where both got shown mixed together).
-  - `_run_single_intent()` — `recursion_limit=15` (raised from an earlier 8 after a real `GraphRecursionError` — the `NEEDS_EXTERNAL_CHECK` 2-hop flow plus a correction retry needs real headroom), verification with one correction attempt then honest fallback.
+  - `_run_single_intent()` — `recursion_limit=15` (raised from an earlier 8 after a real `GraphRecursionError`). The customer-visible pipeline is: extract raw reply/products → retrieve sidecar evidence → propose claims → verify claims → render approved claims only → run price-grounding defense → run final safety scan → optionally one direct targeted specialist correction when eligible → append only the safe rendered reply to session history.
   - `ask()` — split_intents → loop sub-intents → merge_answers.
-  - `ask_stream()` — the SSE generator for `/chat/stream`. Emits progress events (`understanding_request`, `searching_products`, `checking_inventory`, `verifying_claims`, `preparing_response`) then one final `done` event. Runs the **same** verification + one-correction-retry logic as the non-streaming path (confirmed via direct code inspection — this was verified, not assumed). Has its own `messages_before` tracking to only scan new messages for products/replies (distinct mechanism from history-trimming, solves a different problem: avoiding stale product duplication from earlier turns in the same session).
+  - `ask_streaming()` — the streaming generator used by `/chat/stream`. Emits progress events (`understanding_request`, `searching_products`, `checking_inventory`, `verifying_claims`, `preparing_response`) then one final `done` event. It uses the same approved-only finalization and one-correction helper as non-streaming; raw model tokens/replies are not emitted before verification. Has its own `messages_before` tracking to only scan new messages for products/replies (distinct mechanism from history-trimming, solves a different problem: avoiding stale product duplication from earlier turns in the same session).
 
 ### API (`api/`)
 - `chat.py` — `SESSION_HISTORIES: dict[str, list[dict]] = {}` — **in-memory only, not persisted**. Lost on server restart. `ChatRequest {message: str, session_id: str | None}`, `ChatResponse {session_id: str, reply: str, products: list[dict] = []}`. `POST /chat`, `POST /chat/stream` (SSE).
@@ -95,7 +98,7 @@ Two entirely separate, unrelated systems, easy to conflate:
 ## Security boundaries
 
 ### Phase 1
-- No checkout/payment/order-creation/refund/cancel tool exists anywhere in the MCP registry — structurally absent, not disabled.
+- No checkout/payment/order-creation/refund/cancel tool exists in the local Scout MCP registry — structurally absent there, not disabled. `MCPToolManager` may load additional raw tools from configured MCP servers such as Stripe, but specialists receive only the code-selected allowlisted Scout tools.
 - Code-enforced (not prompt-based) tool allowlists per agent.
 - `ToolCallGuard`: max 10 tool calls/turn, max 1 identical call, contextvar-based, reset per sub-intent.
 - Repository layer separating data access from business logic (refactor caught a real duplicate-seed-data bug).
@@ -105,6 +108,13 @@ Two entirely separate, unrelated systems, easy to conflate:
 - Split one combined stock/order agent into `inventory_agent` and `order_agent` (narrower blast radius, a prompt change to one can't affect the other).
 - Added `external_offer_agent` as a 5th specialist with the `NEEDS_EXTERNAL_CHECK` mandatory handoff pattern.
 - **Documented tradeoff:** external-offer fallback used to be automatic (merged into search logic itself, no decision point). After the split, it depends on the supervisor correctly recognizing the signal — a real, accepted reduction in guarantee for cleaner separation of responsibility. Verified working via `ROUTE-05` in the eval suite.
+
+### Structured evidence / approved-output phases
+- Tool calls produce sidecar `EvidenceEntry`/`ToolCallRecord` objects with per-sub-intent isolation and attempt numbers. These records are not appended to LangGraph messages, session history, API responses, or SSE payloads.
+- `ProposedClaim` creation and broad deterministic verification run before customer output. Unsupported, failed, unknown-evidence, wrong-subject, wrong-domain, and conflicting claims are rejected with stable internal reason codes.
+- Customer-facing factual replies and chat product cards are rebuilt from approved claims only. The renderer does not try to erase bad facts from original model prose; it reconstructs supported product/order/inventory/policy/external-offer statements from structured claims.
+- There is exactly one bounded targeted correction opportunity per sub-intent. It uses `VerificationResult.correction_agent`, invokes only that selected specialist directly (not the Supervisor), reuses the same sub-intent evidence context with `attempt_number=1`, and then reruns claim proposal, verification, approved-only rendering, price grounding, and final safety scan. Raw correction output is never returned directly.
+- Deterministic adversarial tests cover unsupported/stale/cross-subject/external/malicious facts across products, inventory, orders, policy, external offers, correction boundaries, streaming, and multi-intent merge. This is a tested implementation guarantee for those code paths, not a claim of formal security or complete hallucination prevention.
 
 ### On "why not let AI move money" — checked against real 2026 industry practice, not assumed
 Researched directly: real platforms (Fini, My AskAI, ReturnGO) do let AI agents autonomously issue refunds through the actual payment processor. The nuance: every credible deployment gates this behind dollar thresholds, explicit policy-logic checks, and human escalation for anything outside it — infrastructure this project doesn't have. Decision: keep the boundary total (zero agent access) rather than build a partial, unconvincing version of that safety net. A `cancel_order` tool with a hard `status == "pending"` code-enforced check was considered as a legitimate middle ground and **deliberately not built** for this project's current scope.
@@ -129,7 +139,7 @@ Four, all genuinely tested: **Groq** (qwen/qwen3.6-27b — fast, hits daily quot
 9. Order-specific return question ("can I return order O1001?") misrouting to `policy_agent` instead of `order_agent` → fixed with an explicit supervisor routing rule.
 10. `check_store_stock` syntax bug (`_in rows` missing a space) introduced during a patch → caught before it shipped.
 11. Stale internal near-miss products mixed with real external results after a `NEEDS_EXTERNAL_CHECK` handoff → fixed with `had_external_handoff` filtering (same root cause as the unfiltered-shared-state limitation above, fixed at the symptom level).
-12. Streaming path (`ask_stream`) confirmed to send **untrimmed** history to the model on its first call, unlike the other 3 call sites — found via direct code inspection, **not yet fixed** (one-line fix identified: wrap with `_trim_history_for_model()`).
+12. Streaming path (`ask_streaming`) previously sent **untrimmed** history to the model on its first call, unlike the other graph call sites — found via direct code inspection and fixed by wrapping that first streaming graph input with `_trim_history_for_model()`.
 
 ## Evaluation
 
@@ -142,12 +152,15 @@ Two test cases required real fixes (not just loosened assertions) during today's
 ## Known gaps, stated honestly (not hidden, not apologized for excessively)
 
 - No real authentication anywhere.
+- New deterministic pytest baseline exists: **121 tests passing**. Coverage includes evidence schemas/collection, claim proposal, broad claim verification, approved-only rendering, targeted correction, adversarial safety, local MCP tool registry security, effective specialist allowlists, response sanitization, product extraction/provider flattening, streaming/non-streaming history trimming, and chat API schemas.
 - No unit tests for the deterministic services layer in isolation (eval suite tests end-to-end via real HTTP calls).
-- No SSE-specific or API-schema-specific unit tests.
+- No full SSE endpoint integration tests; streaming internals have deterministic direct-call coverage.
 - `create_react_agent` import is technically deprecated in the current LangGraph version (`from langchain.agents import create_agent` is the new path) — functional, not yet migrated.
 - Shared, unfiltered LangGraph state within a turn (see "Memory and state" above) — a real, confirmed architectural limitation, not yet fixed.
-- Verification gate covers price grounding only — broader factual claims (product/promotion/stock/order status) rely on prompt-level rules, a weaker guarantee.
-- Streaming path's first model call isn't history-trimmed (see bug #12 above).
+- Live 18-case LLM evaluation has not been rerun after the structured evidence/rendering/correction phases; deterministic tests are current, live provider behavior still needs manual/eval confirmation.
+- The deterministic verifier/renderer covers explicit claim types and narrow value extraction. It does not perform broad semantic proof, fuzzy policy reasoning, image analysis, or formal natural-language entailment.
+- Approved-only rendering is intentionally conservative: conflicting or missing evidence may omit useful facts that a human would consider obvious.
+- Streaming path's first model call now uses the same history trimming helper as non-streaming; the flat-state/shared-message tradeoff remains.
 - Multi-intent query decomposition exists (`intent_splitter.py`) but full compound-query handling isn't deeply stress-tested.
 
 ## Demo script (condensed)

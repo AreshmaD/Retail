@@ -45,6 +45,25 @@ KNOWN_COLORS = {
     "gold", "silver", "orange", "denim",
 }
 
+SIZE_ALIASES = {
+    "extra small": "XS",
+    "x-small": "XS",
+    "xsmall": "XS",
+    "small": "S",
+    "medium": "M",
+    "large": "L",
+    "extra large": "XL",
+    "x-large": "XL",
+    "xlarge": "XL",
+}
+
+
+def _normalize_size(size: Optional[str]) -> Optional[str]:
+    if not size:
+        return None
+    stripped = size.strip()
+    return SIZE_ALIASES.get(stripped.lower(), stripped)
+
 
 def _extract_price_constraint(query: str) -> tuple[str, Optional[float]]:
     """Deterministically pulls a price phrase like 'under $100' out of a
@@ -216,20 +235,55 @@ def check_stock(
     size: Optional[str] = None,
     color: Optional[str] = None,
 ) -> dict:
+    requested_size = _normalize_size(size)
+    requested_color = color.strip() if isinstance(color, str) and color.strip() else None
+    product_repo = ProductRepository(session)
     stock_repo = StockRepository(session)
-    variants = stock_repo.get_variants(product_id, size=size, color=color)
+    product = product_repo.get_by_id(product_id)
+    if not product:
+        return {
+            "product_id": product_id,
+            "found": False,
+            "requested_size": requested_size,
+            "requested_color": requested_color,
+            "in_stock": False,
+            "total_quantity": 0,
+            "variants": [],
+        }
+
+    variants = stock_repo.get_variants(
+        product_id,
+        size=requested_size,
+        color=requested_color,
+    )
 
     if not variants:
-        return {"product_id": product_id, "in_stock": False, "variants": []}
+        return {
+            "product_id": product_id,
+            "found": True,
+            "requested_size": requested_size,
+            "requested_color": requested_color,
+            "in_stock": False,
+            "total_quantity": 0,
+            "variants": [],
+        }
 
     variant_list = [
-        {"size": v.size, "color": v.color, "quantity": v.quantity}
+        {
+            "size": v.size,
+            "color": v.color,
+            "quantity": v.quantity,
+            "in_stock": v.quantity > 0,
+        }
         for v in variants
     ]
     total_qty = sum(v["quantity"] for v in variant_list)
 
     return {
         "product_id": product_id,
+        "found": True,
+        "requested_size": requested_size,
+        "requested_color": requested_color,
         "in_stock": total_qty > 0,
         "total_quantity": total_qty,
         "variants": variant_list,

@@ -4,6 +4,7 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_ollama import OllamaEmbeddings
 
+from scout.agents.diagnostics import timed_stage
 from scout.db.session import SessionLocal
 from scout.db.models import Product
 
@@ -12,8 +13,21 @@ EMBEDDING_MODEL = "nomic-embed-text"
 COLLECTION_NAME = "product_catalog"
 
 
+class _TimedEmbeddings:
+    def __init__(self, inner: OllamaEmbeddings):
+        self.inner = inner
+
+    def embed_query(self, text: str) -> list[float]:
+        with timed_stage("embedding_generation"):
+            return self.inner.embed_query(text)
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        with timed_stage("embedding_generation", document_count=len(texts)):
+            return self.inner.embed_documents(texts)
+
+
 def _get_embeddings() -> OllamaEmbeddings:
-    return OllamaEmbeddings(model=EMBEDDING_MODEL)
+    return _TimedEmbeddings(OllamaEmbeddings(model=EMBEDDING_MODEL))
 
 
 def _product_to_document(product: Product) -> Document:
@@ -50,8 +64,10 @@ def load_product_embeddings() -> Chroma:
 
 
 def semantic_search_products(query: str, k: int = 10) -> list[str]:
-    vector_store = load_product_embeddings()
-    results = vector_store.similarity_search(query, k=k)
+    with timed_stage("product_chroma_load"):
+        vector_store = load_product_embeddings()
+    with timed_stage("product_chroma_retrieval", k=k):
+        results = vector_store.similarity_search(query, k=k)
     return [doc.metadata["product_id"] for doc in results]
 
 

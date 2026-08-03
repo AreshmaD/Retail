@@ -45,20 +45,43 @@ def check_store_stock(
     "not at X, but available at Y", not as if X actually had it."""
     product_repo = ProductRepository(session)
     store_repo = StoreRepository(session)
+    requested_store_name = (
+        store_name.strip() if isinstance(store_name, str) and store_name.strip() else None
+    )
 
     product = product_repo.get_by_id(product_id)
     if not product:
-        return {"product_id": product_id, "found": False, "stores": []}
+        return {
+            "product_id": product_id,
+            "found": False,
+            "requested_store_name": requested_store_name,
+            "stores": [],
+        }
 
-    rows = store_repo.get_stock_for_product(product_id, store_name=store_name)
+    rows = store_repo.get_stock_for_product(product_id, store_name=requested_store_name)
+
+    if requested_store_name and not rows:
+        return {
+            "product_id": product_id,
+            "found": True,
+            "requested_store_name": requested_store_name,
+            "requested_store_had_no_stock": False,
+            "stores": [],
+        }
 
     requested_store_had_no_stock = False
-    if store_name and (not rows or all(stock_row.quantity == 0 for stock_row, _ in rows)):
+    if requested_store_name and all(stock_row.quantity == 0 for stock_row, _ in rows):
         requested_store_had_no_stock = True
         rows = store_repo.get_stock_for_product(product_id, store_name=None)
 
     if not rows:
-        return {"product_id": product_id, "found": False, "stores": [], "alternatives_checked": requested_store_had_no_stock}
+        return {
+            "product_id": product_id,
+            "found": False,
+            "requested_store_name": requested_store_name,
+            "stores": [],
+            "alternatives_checked": requested_store_had_no_stock,
+        }
 
     store_results = [
         {
@@ -77,6 +100,7 @@ def check_store_stock(
     return {
         "product_id": product_id,
         "found": True,
+        "requested_store_name": requested_store_name,
         "requested_store_had_no_stock": requested_store_had_no_stock,
         "stores": store_results,
     }

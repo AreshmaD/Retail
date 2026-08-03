@@ -1,170 +1,95 @@
-# Scout — Retail AI Shopping Assistant
+# Scout — Agentic Retail Shopping Assistant
 
-A full-stack shopping assistant: a React e-commerce site with product
-browsing, cart, and real (test-mode) Stripe checkout — plus a floating AI
-assistant powered by a LangGraph multi-agent backend that can recommend
-products, check stock/store availability, track orders, answer policy
-questions, and complete checkout, all rendering real product cards inline
-in the conversation.
+Scout is a full-stack retail demo that pairs a React storefront with a verified multi-agent shopping assistant. The storefront handles browsing, cart state, saved items, and Stripe Elements checkout; the assistant answers shopping questions through a FastAPI + LangGraph backend with code-enforced tool boundaries, structured evidence, deterministic verification, and approved-only rendering.
 
-## Architecture
+The guiding rule is simple: **anything that can cost money or trust stays deterministic; the model only helps with language-shaped assistance.**
 
-```
-Customer / Browser
-   → React + Vite Frontend (routing, cart, search, chat widget)
-   → FastAPI (Pydantic validation)
-        ├─ /products, /products/{id}, /products/{id}/similar   (deterministic, no LLM)
-        ├─ /checkout                                            (deterministic, no LLM)
-        ├─ /affiliate/click/{id}, /affiliate/stats              (deterministic, no LLM)
-        └─ /chat, /chat/stream                                  (LangGraph Supervisor)
-                → Specialist Agent (recommend / stock & orders / policy)
-                → MCP Tools (recommend_products, search, stock, stores,
-                             orders, checkout, retrieve_policy_chunks)
-                → SQLite / 2x Chroma vector stores / Stripe (test mode) / mock affiliate catalog
-```
+## Demo Highlights
 
-**Key design principle carried through the whole build:** anything that
-doesn't need a model's judgment (browsing, checkout, click tracking,
-product ranking) is deterministic code — fast, free, and testable. Only
-genuinely conversational/ambiguous tasks (routing, explaining results)
-go through the LLM.
+- **Agentic commerce assistant:** recommendations, inventory checks, store availability, order status, policy Q&A, and external-offer fallback.
+- **Five specialists:** `recommend_agent`, `inventory_agent`, `order_agent`, `external_offer_agent`, and `policy_agent`, built with LangChain `create_agent` and reached through deterministic/direct routing or the Supervisor path when needed.
+- **Evidence-backed output:** tool calls produce structured evidence; proposed claims are verified before customer-visible factual replies and product cards are rebuilt from approved claims.
+- **Safe commerce boundary:** no checkout, payment, refund, cancellation, SQL, shell, or unrestricted HTTP tool is exposed to specialists. Checkout remains a deterministic REST route.
+- **Local demo mode:** `ENABLE_STRIPE_MCP=false MODEL_PROVIDER=ollama` starts the app without Stripe MCP discovery while preserving deterministic Stripe REST checkout code.
+- **Validated baseline:** 323 deterministic backend tests pass, frontend lint/build pass, and the polished demo flows cover recommendations, inventory, orders, policy, external offers, payment boundaries, and out-of-scope handling.
 
-## Frontend
+## Architecture At A Glance
 
-React + Vite, single-page, purple visual identity. The chat widget is the
-"conversational commerce" layer — browsing works normally via routes/grids,
-and the AI assistant is a floating overlay that renders real product cards
-inline, not just text.
+![Scout portfolio architecture overview](docs/assets/scout-portfolio-overview.png)
 
-**Pages:**
-| Route | Page | Purpose |
-|---|---|---|
-| `/` | HomePage | Hero banner + featured products grid |
-| `/category/:category` | CategoryPage | Filtered product grid |
-| `/search?q=...` | SearchResultsPage | Keyword search results |
-| `/product/:productId` | ProductDetailPage | Full detail, tags, "You might also like" |
-| `/cart` | CartPage | Line items, quantities, real Stripe Elements checkout |
-| `/saved` | SavedItemsPage | Wishlist |
-
-**State:** `CartContext` and `SavedItemsContext` — reducer + `localStorage`
-persistence, survives page refresh without a backend session.
-
-**Shared components:** `ProductCard` (used identically in grids, search,
-detail page, and the chat widget), `ProductGrid`, `ChatWidget` (floating
-bubble → chat panel, renders real `products` from `/chat` as cards).
-
-**Checkout:** Stripe's **Payment Element** (`@stripe/react-stripe-js`).
-Card details are entered into Stripe's own embedded iframe and never touch
-this app's code — qualifies for PCI compliance tier SAQ A, the simplest
-tier, since the application never handles cardholder data at all.
-
-## Backend
-
-**Agents:**
-| Agent | Tools | Responsibility |
-|---|---|---|
-| `recommend_agent` | `recommend_products`, `search`, `stock`, `alternatives` | Hybrid semantic recommendations, plus narrow literal lookups |
-| `stock_order_agent` | `search`, `stock`, `stores`, `orders`, `checkout` | Stock/store lookup, order status, checkout |
-| `policy_agent` | `retrieve_policy_chunks` | RAG-grounded returns/refunds/shipping Q&A |
-
-### The recommendation pipeline
-
-`recommend_products` is the flagship tool — a single, deterministic
-pipeline the agent calls once per open-ended recommendation request:
-
-```
-Natural language query
-   → semantic_search_products()      Chroma embeddings (nomic-embed-text),
-                                       understands "something for a night
-                                       out" — no literal keyword needed
-   → rank_products()                 in-stock filter, active-promotion
-                                       lookup, weighted scoring (rating,
-                                       price-fit, promotion, semantic rank)
-   → top 3 results returned to the agent, which explains them in
-     natural language — grounded in real scores/prices/promotions,
-     never invented
+```mermaid
+flowchart LR
+  Browser["React storefront"] --> Rest["Deterministic REST routes"]
+  Browser --> Chat["/chat and /chat/stream"]
+  Rest --> Services["Shared service layer"]
+  Chat --> Splitter["Intent splitter / deterministic fast paths"]
+  Splitter --> Scope["Safe scope response"]
+  Splitter --> Plan["Ordered multi-agent plan"]
+  Splitter --> Supervisor["Supervisor / orchestration path"]
+  Splitter --> Direct["Direct specialist routing"]
+  Scope --> Render
+  Plan --> Specialists
+  Supervisor --> Specialists["Five specialist agents"]
+  Direct --> Specialists
+  Specialists --> Tools["Allowlisted local Scout MCP tools"]
+  Tools --> Services
+  Services --> Data["SQLite + Chroma policy/product indexes"]
+  Tools --> Evidence["EvidenceEntry records"]
+  Evidence --> Claims["ProposedClaim verification"]
+  Claims --> Render["Approved-only rendering"]
+  Render --> Browser
 ```
 
-Two Chroma collections exist for two different jobs: one for policy
-document retrieval (RAG Q&A), one for product catalog semantic search
-(recommendations) — separate concerns, separate embeddings, same
-underlying pattern.
+See [`docs/architecture.md`](docs/architecture.md) for the detailed flow and [`docs/assets/scout-current-architecture.png`](docs/assets/scout-current-architecture.png) for the full current architecture diagram.
 
-**Promotions:** a lightweight `Promotion` table (product-specific or
-category-wide discounts) — not a full promo-code/cart-rules engine, just
-enough to demonstrate promotion-aware ranking and honest discount
-reporting in the agent's replies.
+## Portfolio Screenshots
 
-**Deterministic REST routes** (`api/products.py`, `api/checkout.py`,
-`api/affiliate.py`) power browsing, search, checkout, and affiliate click
-tracking — reusing the exact same service-layer functions the MCP tools
-call, so there's one source of truth for business logic regardless of
-whether a request comes from the UI directly or through the AI agent.
+Recommended portfolio captures live in [`docs/screenshots/README.md`](docs/screenshots/README.md). The exported architecture assets are:
+
+- [`docs/assets/scout-portfolio-overview.png`](docs/assets/scout-portfolio-overview.png) — compact portfolio overview.
+- [`docs/assets/scout-current-architecture.png`](docs/assets/scout-current-architecture.png) — detailed implementation architecture.
 
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | React, Vite, React Router |
-| Payments (client) | `@stripe/stripe-js`, `@stripe/react-stripe-js` (Payment Element) |
-| Backend | FastAPI, Pydantic, SSE (`sse-starlette`) |
-| Orchestration | LangGraph, `langgraph-supervisor`, LangChain |
-| Model | Swappable — Ollama (local), Google Gemini, or Groq |
-| Tool boundary | MCP (`mcp` Python SDK, `langchain-mcp-adapters`) |
-| Data | SQLite (SQLAlchemy) |
-| RAG / Semantic search | Chroma (2 collections) + Ollama embeddings (`nomic-embed-text`) |
-| Ranking | Deterministic weighted scoring (`ranking_service.py`) — no ML model |
-| Payments (server) | Stripe (test mode, direct SDK) |
-| Monetization | Mock affiliate vendor catalog + real click-tracking |
+| Frontend | React, Vite, React Router, ESLint |
+| Checkout UI | Stripe Elements via `@stripe/react-stripe-js` |
+| Backend | FastAPI, Pydantic, SSE |
+| Agent orchestration | LangGraph Supervisor + five LangChain `create_agent` specialists |
+| Models | Ollama, Claude, Gemini, Groq provider support |
+| Tool boundary | MCP local Scout server + code-selected specialist allowlists |
+| Data | SQLite, SQLAlchemy repositories/services |
+| Retrieval | Chroma product and policy collections, Ollama `nomic-embed-text` |
+| Safety | Evidence schemas, claim verification, approved-only renderer, bounded correction |
 
-## Project Structure
+## Repository Layout
 
-```
-retail-ai-assistant/
-├── docs/
-│   └── ARCHITECTURE.md
-├── backend/
-│   ├── src/scout/
-│   │   ├── main.py
-│   │   ├── config.py
-│   │   ├── api/
-│   │   │   ├── chat.py
-│   │   │   ├── products.py
-│   │   │   ├── checkout.py
-│   │   │   └── affiliate.py
-│   │   ├── agents/
-│   │   ├── mcp_server/
-│   │   │   └── server.py            # 9 tools, including recommend_products
-│   │   ├── services/
-│   │   │   ├── product_service.py
-│   │   │   ├── store_service.py
-│   │   │   ├── order_service.py
-│   │   │   ├── payment_service.py
-│   │   │   ├── affiliate_service.py
-│   │   │   └── ranking_service.py   # semantic + inventory + promotion scoring
-│   │   ├── rag/
-│   │   │   ├── vector_store.py      # policy docs collection
-│   │   │   └── product_embeddings.py # product catalog collection
-│   │   └── db/
-│   │       └── models.py            # includes Promotion
-│   ├── tests/eval/
-│   │   ├── test_cases.json
-│   │   ├── conversation_test_cases.json
-│   │   └── run_eval.py
-│   ├── data/
-│   │   ├── product_images/
-│   │   ├── chroma/                  # policy embeddings
-│   │   └── chroma_products/         # product embeddings
-│   └── requirements.txt
-└── frontend/
-    └── src/
-        ├── context/
-        ├── components/
-        ├── pages/
-        └── api/
+```text
+backend/
+  src/scout/
+    api/                 FastAPI routes: chat, products, checkout, affiliate, cart add validation
+    agents/              Supervisor, specialists, evidence, claims, verification, rendering
+    mcp_server/          Local Scout MCP registry: 11 approved read tools
+    services/            Deterministic business logic used by REST and tools
+    repositories/        Database access layer
+    rag/                 Chroma policy/product embedding builders
+    db/                  SQLAlchemy models, session, seed data
+  tests/                 Deterministic pytest baseline
+  tests/eval/            Live evaluation harness and release artifacts
+frontend/
+  src/                   React storefront, local cart/saved state, chat widget
+docs/                    Portfolio, architecture, security, eval, demo docs
 ```
 
-## Setup
+## Local Setup
+
+### Prerequisites
+
+- Python 3 with `venv`
+- Node.js and npm
+- Ollama with `qwen3:8b` and `nomic-embed-text`
+- Stripe publishable/test secrets only if exercising checkout locally
 
 ### Backend
 
@@ -172,20 +97,23 @@ retail-ai-assistant/
 cd backend
 python3 -m venv venv
 source venv/bin/activate
-pip install -e .
-pip install -r requirements.txt
-
-ollama pull nomic-embed-text
-```
-
-```bash
+pip install -r requirements-dev.txt
 python3 src/scout/db/session.py
 python3 src/scout/db/seed.py
-python3 src/scout/rag/vector_store.py           # policy embeddings
-python3 src/scout/rag/product_embeddings.py     # product embeddings — rebuild any time products change
-
-uvicorn scout.main:app --reload --app-dir src
+python3 src/scout/rag/vector_store.py
+python3 src/scout/rag/product_embeddings.py
 ```
+
+For local Ollama demo mode:
+
+```bash
+ollama pull qwen3:8b
+ollama pull nomic-embed-text
+ENABLE_STRIPE_MCP=false MODEL_PROVIDER=ollama \
+python -m uvicorn scout.main:app --host 127.0.0.1 --port 8000
+```
+
+Copy `backend/.env.example` to `backend/.env` for local secrets. Do not commit real `.env` files.
 
 ### Frontend
 
@@ -195,56 +123,54 @@ npm install
 npm run dev
 ```
 
-`.env` files: see `backend/.env` and `frontend/.env` for required keys
-(model provider, Stripe test keys — publishable client-side, restricted
-secret server-side).
+The frontend expects the backend on `http://127.0.0.1:8000` for API and product image URLs.
 
-### Eval harness
+## Validation
 
 ```bash
 cd backend
-python3 tests/eval/run_eval.py
+venv/bin/python -m pytest tests -q
+
+cd ../frontend
+npm run lint
+npm run build
 ```
 
-Runs 9 single-turn test cases + 3 multi-turn conversation tests against the
-live `/chat` endpoint. Reports transient model-API quota errors separately
-from real behavioral failures.
+Live-evaluation methodology and release metrics are summarized in [`docs/evaluation.md`](docs/evaluation.md). Run-specific JSON and log artifacts can be regenerated locally and do not need to be committed for the portfolio demo.
 
-## Model Provider Notes
+## Demo Flow
 
-Multi-agent tool-calling reliability proved genuinely model-dependent
-during development. Tested: Qwen3 (Ollama, correct but 60-90s/turn on
-consumer hardware), Gemini 3.5 Flash (fast/accurate, but a ~20 requests/day
-free tier made iteration impractical), Llama 3.3 70B (Groq, deprecated
-mid-project). Settled on **Qwen 3.6 27B via Groq** — fast, reliable
-tool-call formatting, generous free tier (though even this was exhausted
-more than once during heavy same-day development and testing).
+Use these as the live demo script:
 
-## Known Gaps (by design, not oversight)
+| Step | Query | What it proves |
+|---|---|---|
+| 1 | “Recommend a dress under $80.” | Verified recommendations, prices, promotions, and product cards. |
+| 2 | “Is the black midi dress in a medium?” | Product/color/size inventory evidence, not product summary fallback. |
+| 3 | “Where is order O1001?” | Read-only order lookup without mutation tools. |
+| 4 | “Recommend a black dress under $80, check Maple Grove medium availability, and explain opened-item returns.” | Dependent multi-intent orchestration across recommendation, inventory, and policy. |
+| 5 | “Do you have any red cocktail dresses under $50?” | Verified internal insufficiency before labeled third-party affiliate offers. |
+| 6 | “Can you charge my card and buy this?” | Safe payment boundary: agents cannot charge cards or complete checkout. |
+| 7 | “What is the weather today?” | Out-of-scope handling with no specialist/tool call. |
 
-- No auth/RBAC/rate limiting at the API boundary
-- No live carrier tracking or warehouse system
-- No human escalation workflow
-- **Multi-intent queries are not decomposed** — e.g. "recommend a dress
-  and check my order" will likely only address one of the two asks, since
-  the supervisor routes to exactly one specialist per message (a
-  deliberate fix for a different, earlier bug — see Architecture
-  Decisions). True multi-intent handling would need an intent-splitting
-  preprocessing step, not yet built.
-- Session/cart state: backend chat history is in-memory; frontend
-  cart/saved-items use `localStorage` (client-only)
-- Ranking uses a hand-weighted scoring formula, not a trained ML ranking
-  model — a reasonable, explainable choice at this catalog size, but
-  wouldn't scale to a "learn from click/purchase data" system without
-  real rework
-- No LLM-as-judge grading in the eval harness — deliberately: the current
-  test cases check factual/grounding correctness (stock status, policy
-  figures, absence of hallucination), which a code grader checks more
-  reliably and without doubling API quota cost per test
+See [`docs/demo-script.md`](docs/demo-script.md) for the full talk track.
 
-## Roadmap
+## Safety Claims
 
-- [ ] Multi-intent query decomposition
-- [ ] Unit tests for the services layer (ranking, product, order services)
-- [ ] REST route integration tests (no LLM involved, cheap to run exhaustively)
-- [ ] Deployment (currently local-only)
+- Specialist agents receive only code-selected read tools; no checkout, payment, refund, cancellation, SQL, shell, or unrestricted HTTP tool is exposed to agents.
+- Tool calls create sanitized evidence records; customer-visible facts are proposed, verified, and approved before rendering.
+- Rejected facts are not edited out of model prose. Final replies and product cards are rebuilt from approved claims.
+- Checkout, PaymentIntent creation, order creation, cart add validation, and affiliate redirects remain deterministic FastAPI/service-layer paths.
+- Out-of-scope requests return a safe scope response without specialist or tool calls.
+- External offers are labeled third-party, use explicit affiliate links, and cannot be added to the Scout cart.
+
+## Known Limits
+
+- No production auth, RBAC, rate limiting, human escalation, carrier integration, or warehouse integration.
+- Chat session history is in-memory; frontend cart/saved state is browser `localStorage`.
+- Ollama latency depends heavily on local hardware; release eval should run in isolation.
+- The verifier covers explicit Scout-domain claim types; it is not a formal proof system or broad semantic entailment engine.
+- External-offer images are allowlisted/seeded demo URLs; retailer CDNs can still be brittle outside the app's control.
+
+## License
+
+Portfolio/demo project. Add a license before distributing beyond portfolio review.

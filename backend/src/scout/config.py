@@ -5,12 +5,24 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 class Settings:
     OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "qwen3:8b")
     OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
     STRIPE_MCP_KEY: str = os.getenv("STRIPE_MCP_KEY", "")
     STRIPE_MCP_URL: str = os.getenv("STRIPE_MCP_URL", "https://mcp.stripe.com")
+    ENABLE_STRIPE_MCP: bool = _env_bool("ENABLE_STRIPE_MCP", True)
+
+    MODEL_INVOCATION_TIMEOUT_SECONDS: float = float(os.getenv("MODEL_INVOCATION_TIMEOUT_SECONDS", "45"))
+    SUB_INTENT_TIMEOUT_SECONDS: float = float(os.getenv("SUB_INTENT_TIMEOUT_SECONDS", "90"))
+    CHAT_REQUEST_TIMEOUT_SECONDS: float = float(os.getenv("CHAT_REQUEST_TIMEOUT_SECONDS", "110"))
 
     # "ollama" (documented local default) or "gemini" (fast dev testing)
     MODEL_PROVIDER: str = os.getenv("MODEL_PROVIDER", "ollama")

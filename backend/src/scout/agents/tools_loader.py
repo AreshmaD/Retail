@@ -8,25 +8,32 @@ from scout.config import settings
 
 SERVER_PATH = Path(__file__).resolve().parent.parent / "mcp_server" / "server.py"
 
-MCP_SERVERS_CONFIG = {
-    "scout": {
-        "transport": "stdio",
-        "command": "python3",
-        "args": [str(SERVER_PATH)],
-    },
-    "stripe": {
-        "transport": "streamable_http",
-        "url": settings.STRIPE_MCP_URL,
-        "headers": {
-            "Authorization": f"Bearer {settings.STRIPE_MCP_KEY}",
+
+def build_mcp_servers_config() -> dict:
+    config = {
+        "scout": {
+            "transport": "stdio",
+            "command": "python3",
+            "args": [str(SERVER_PATH)],
         },
-    },
-}
+    }
+
+    if settings.ENABLE_STRIPE_MCP:
+        config["stripe"] = {
+            "transport": "streamable_http",
+            "url": settings.STRIPE_MCP_URL,
+            "headers": {
+                "Authorization": f"Bearer {settings.STRIPE_MCP_KEY}",
+            },
+        }
+
+    return config
 
 
 class MCPToolManager:
     def __init__(self):
-        self.client = MultiServerMCPClient(MCP_SERVERS_CONFIG)
+        self.servers_config = build_mcp_servers_config()
+        self.client = MultiServerMCPClient(self.servers_config)
         self._exit_stack = AsyncExitStack()
         self.tools: list = []
 
@@ -35,7 +42,9 @@ class MCPToolManager:
             self.client.session("scout")
         )
         scout_tools = await load_mcp_tools(scout_session)
-        stripe_tools = await self.client.get_tools(server_name="stripe")
+        stripe_tools = []
+        if "stripe" in self.servers_config:
+            stripe_tools = await self.client.get_tools(server_name="stripe")
         self.tools = scout_tools + stripe_tools
         return self.tools
 

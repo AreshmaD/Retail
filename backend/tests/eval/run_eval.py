@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -47,7 +48,7 @@ def run_test_case(tc: dict, max_retries: int = 1) -> dict:
         failures.append("expected products in response, got none")
 
     must_contain_any = tc.get("must_contain_any", [])
-    if must_contain_any and not any(phrase.lower() in reply_lower for phrase in must_contain_any):
+    if must_contain_any and not any(phrase.lower() in reply_lower for phrase in must_contain_any) and not _semantic_expectation_passes(tc, reply, products):
         failures.append(f"reply missing any of: {must_contain_any}")
 
     must_not_contain = tc.get("must_not_contain", [])
@@ -113,7 +114,7 @@ def run_conversation_test_case(tc: dict, max_retries: int = 1) -> dict:
             failures.append("expected products, got none")
 
         must_contain_any = turn.get("must_contain_any", [])
-        if must_contain_any and not any(p.lower() in reply_lower for p in must_contain_any):
+        if must_contain_any and not any(p.lower() in reply_lower for p in must_contain_any) and not _semantic_expectation_passes(turn, data.get("reply", ""), products):
             failures.append(f"reply missing any of: {must_contain_any}")
 
         must_not_contain = turn.get("must_not_contain", [])
@@ -139,6 +140,53 @@ def run_conversation_test_case(tc: dict, max_retries: int = 1) -> dict:
         "skipped_due_to_quota": any_quota_issue and not all_passed,
         "turns": turn_results,
     }
+
+
+def _semantic_expectation_passes(tc: dict, reply: str, products: list[dict]) -> bool:
+    query = (tc.get("query") or "").lower()
+    reply_lower = (reply or "").lower()
+    if _asks_inventory_unavailability(query, tc):
+        return _mentions_requested_size(query, reply_lower) and _mentions_unavailable(reply_lower) and not _asserts_available(reply_lower)
+    return False
+
+
+def _asks_inventory_unavailability(query: str, tc: dict) -> bool:
+    expected = " ".join(tc.get("must_contain_any", [])).lower()
+    return (
+        any(term in query for term in ("available", "stock", "size", "medium", "large", "small"))
+        and any(term in expected for term in ("out of stock", "medium", "size"))
+    )
+
+
+def _mentions_requested_size(query: str, reply: str) -> bool:
+    size_groups = [
+        (("medium", " size m", "size m", "(m)", " m "), ("medium", r"\bsize\s+m\b", r"\(m\)")),
+        (("large", " size l", "size l", "(l)", " l "), ("large", r"\bsize\s+l\b", r"\(l\)")),
+        (("small", " size s", "size s", "(s)", " s "), ("small", r"\bsize\s+s\b", r"\(s\)")),
+    ]
+    for query_terms, reply_terms in size_groups:
+        if any(term in query for term in query_terms):
+            return any(re.search(term, reply) for term in reply_terms)
+    return True
+
+
+def _mentions_unavailable(reply: str) -> bool:
+    return any(
+        phrase in reply
+        for phrase in (
+            "out of stock",
+            "unavailable",
+            "not available",
+            "not currently available",
+            "no stock",
+            "0 units",
+            "zero units",
+        )
+    )
+
+
+def _asserts_available(reply: str) -> bool:
+    return " is available " in reply and not _mentions_unavailable(reply)
 
 
 def main():

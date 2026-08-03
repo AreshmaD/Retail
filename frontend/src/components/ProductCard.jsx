@@ -1,15 +1,16 @@
 import { createElement, useState } from "react";
 import { Link } from "react-router-dom";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
-
-function resolveImageUrl(url) {
-  if (!url) return url;
-  return url.startsWith("/") ? `${API_BASE}${url}` : url;
-}
 import { useCart } from "../context/CartContext";
 import { useSavedItems } from "../context/SavedItemsContext";
+import {
+  formatCurrency,
+  getImagePresentation,
+  getPromotionPresentation,
+} from "./ProductCard.helpers";
 import "./ProductCard.css";
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 export default function ProductCard({ product }) {
   const { addToCart } = useCart();
@@ -17,9 +18,12 @@ export default function ProductCard({ product }) {
 
   // Add-to-cart interaction state: "idle" | "loading" | "added" | "error" | "out_of_stock"
   const [cartState, setCartState] = useState("idle");
+  const [imageFailed, setImageFailed] = useState(false);
 
   const isExternal = product.source === "external";
   const saved = isSaved(product);
+  const promotionPresentation = getPromotionPresentation(product);
+  const imagePresentation = getImagePresentation(product, imageFailed);
 
   const resolvedClickUrl = product.click_url
     ? (product.click_url.startsWith("/") ? `${API_BASE}${product.click_url}` : product.click_url)
@@ -56,13 +60,14 @@ export default function ProductCard({ product }) {
         href: resolvedClickUrl,
         target: "_blank",
         rel: "noopener noreferrer sponsored",
+        "aria-label": `View ${product.name} at ${product.vendor_name}`,
       },
       `View at ${product.vendor_name}`
     ),
     createElement(
       "p",
       { className: "product-card-affiliate-disclosure" },
-      "Affiliate link — we may earn a commission"
+      "Affiliate link"
     )
   );
 
@@ -113,20 +118,33 @@ export default function ProductCard({ product }) {
   }
 
   return (
-    <div className="product-card">
+    <div className={`product-card product-card--${product.category || "default"}`}>
       <div className="product-card-image">
-        {product.image_url ? (
-          <img src={resolveImageUrl(product.image_url)} alt={product.name} />
+        {!imagePresentation.showPlaceholder ? (
+          <img
+            src={imagePresentation.imageUrl}
+            alt=""
+            aria-hidden="true"
+            onError={() => setImageFailed(true)}
+          />
         ) : (
-          <div className="product-card-image-placeholder">No image</div>
+          <div
+            className={`product-card-image-placeholder product-card-image-placeholder--${isExternal ? "external" : product.category || "default"}`}
+            role="img"
+            aria-label={imagePresentation.placeholderAltText}
+          >
+            <span className="product-card-image-placeholder-icon" aria-hidden="true">
+              ✦
+            </span>
+          </div>
         )}
 
-        {product.promotion && (
+        {promotionPresentation.badgeText && (
           <span className="product-card-badge product-card-badge--sale">
-            {product.promotion.discount_percent}% OFF
+            {promotionPresentation.badgeText}
           </span>
         )}
-        {isExternal && !product.promotion && (
+        {isExternal && !promotionPresentation.badgeText && (
           <span className="product-card-badge">Third-party</span>
         )}
 
@@ -157,17 +175,17 @@ export default function ProductCard({ product }) {
           </div>
         )}
 
-        {product.promotion ? (
+        {promotionPresentation.hasPromotion && promotionPresentation.salePrice ? (
           <div className="product-card-price-row">
             <span className="product-card-price product-card-price--original">
-              ${product.price?.toFixed(2)}
+              {formatCurrency(promotionPresentation.originalPrice)}
             </span>
             <span className="product-card-price product-card-price--sale">
-              ${product.promotion.discounted_price?.toFixed(2)}
+              {formatCurrency(promotionPresentation.salePrice)}
             </span>
           </div>
         ) : (
-          <p className="product-card-price">${product.price?.toFixed(2)}</p>
+          <p className="product-card-price">{formatCurrency(product.price)}</p>
         )}
 
         {!isExternal && (
