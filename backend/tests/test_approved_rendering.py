@@ -248,8 +248,8 @@ def test_multi_product_recommendation_uses_natural_summary_without_repetition():
     )
 
     assert reply == (
-        "Here are 3 Scout dresses: Wrap Dress for $68.00, Slip Dress for $62.50, "
-        "and Black Midi Dress for $79.99. Each currently has a verified promotional price as shown below."
+        "I found 3 Scout dresses: Wrap Dress for $68.00, Slip Dress for $62.50, "
+        "and Black Midi Dress for $79.99. Sale prices are shown on the cards."
     )
     assert "Scout option" not in reply
     assert "P001" not in reply

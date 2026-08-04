@@ -343,10 +343,10 @@ def _internal_product_summary_sentences(products: list[dict]) -> list[str]:
 
 def _product_list_summary(products: list[dict]) -> str:
     category = _summary_product_category(products)
-    phrase = f"Here are {len(products)} Scout {category}: "
+    phrase = f"I found {len(products)} Scout {category}: "
     phrase += _join_phrases([f"{product['name']} for {_format_money(product['price'])}" for product in products])
     if all(isinstance(product.get("promotion"), dict) and product["promotion"].get("discounted_price") is not None for product in products):
-        phrase += ". Each currently has a verified promotional price as shown below"
+        phrase += ". Sale prices are shown on the cards"
     return phrase + "."
 
 
