@@ -232,6 +232,48 @@ def test_compound_request_cannot_enter_single_intent_direct_routing():
     assert supervisor._direct_route_agent(app, split.structured_intent, split.sub_intents) is None
 
 
+def test_comparison_plan_inserts_ranking_before_store_handoff():
+    split = split_intents_with_metadata(
+        object(),
+        "Compare these three dresses, pick the best under $80, and check which stores have it.",
+    )
+
+    assert split.execution_plan is not None
+    assert [subgoal.intent for subgoal in split.execution_plan.subgoals] == [
+        "product_recommendation",
+        "product_comparison",
+        "store_availability",
+    ]
+    assert split.execution_plan.budget_max == 80
+    assert split.execution_plan.product_type == "dresses"
+
+
+def test_comparison_selects_best_product_before_store_lookup(monkeypatch):
+    result = _run_with_fake_tools(
+        monkeypatch,
+        "Compare these three dresses, pick the best under $80, and check which stores have it.",
+    )
+
+    assert result.graph_markers == [["product_recommendation", "product_comparison", "store_availability"]]
+    assert [call[1] for call in result.calls] == ["recommend_products", "stores"]
+    assert result.calls[1][2] == {"product_id": "P003"}
+    assert "I’d pick Wrap Dress from the verified options" in result.reply
+    assert "based on verified product match, budget fit, lower price" in result.reply
+    assert "The Wrap Dress is not currently available at the Maple Grove store." in result.reply
+
+
+def test_comparison_only_uses_verified_products_without_extra_tool_calls(monkeypatch):
+    result = _run_with_fake_tools(
+        monkeypatch,
+        "Compare these dresses and pick the best under $80.",
+    )
+
+    assert result.graph_markers == [["product_recommendation", "product_comparison"]]
+    assert [call[1] for call in result.calls] == ["recommend_products"]
+    assert "I’d pick Wrap Dress from the verified options" in result.reply
+    assert [product["product_id"] for product in result.products] == ["P001", "P003"]
+
+
 def test_single_intent_direct_routing_remains_unchanged():
     app = App()
     cases = {

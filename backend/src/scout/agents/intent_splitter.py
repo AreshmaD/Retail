@@ -343,7 +343,7 @@ def detect_supported_compound_intent(message: str) -> ExecutionPlan | None:
     normalized = re.sub(r"\s+", " ", original.lower()).strip(" .!?")
     if not re.search(r"\b(and|also|plus|then|if)\b", normalized):
         return None
-    if _has_conflicting_instruction(normalized) or _looks_like_complex_comparison(normalized):
+    if _has_conflicting_instruction(normalized):
         return None
 
     product_type = _extract_product_type(normalized)
@@ -353,9 +353,10 @@ def detect_supported_compound_intent(message: str) -> ExecutionPlan | None:
     location = _extract_location_for_compound(original, normalized)
     order_id = _extract_order_id(original)
 
+    has_comparison = _looks_like_complex_comparison(normalized)
     has_recommendation = bool(
         product_type
-        and _contains_any(normalized, {"recommend", "find", "show me", "search", "looking for", "need", "do you have", "have any"})
+        and _contains_any(normalized, {"recommend", "find", "show me", "search", "looking for", "need", "do you have", "have any", "compare", "pick", "rank"})
     )
     has_inventory = bool(
         _contains_any(normalized, {"available", "availability", "stock", "in stock", "size", "medium", "large", "small"})
@@ -409,6 +410,16 @@ def detect_supported_compound_intent(message: str) -> ExecutionPlan | None:
             depends_on=[],
         )
     )
+
+    if has_comparison:
+        subgoals.append(
+            PlannedSubIntent(
+                intent="product_comparison",
+                specialist="recommend_agent",
+                text=_comparison_sub_intent_text(product_type, budget_max, color),
+                depends_on=["product_recommendation"],
+            )
+        )
 
     if has_inventory or has_store:
         availability_intent = "store_availability" if has_store else "inventory_availability"
@@ -500,6 +511,17 @@ def _external_sub_intent_text(product_type: str | None, budget_max: float | None
     parts.append(product_type or "products")
     if budget_max is not None:
         parts.append(f"under ${budget_max:g}")
+    return " ".join(parts) + "."
+
+
+def _comparison_sub_intent_text(product_type: str | None, budget_max: float | None, color: str | None) -> str:
+    parts = ["Compare verified"]
+    if color:
+        parts.append(color)
+    parts.append(product_type or "products")
+    if budget_max is not None:
+        parts.append(f"under ${budget_max:g}")
+    parts.append("and pick the best option")
     return " ".join(parts) + "."
 
 

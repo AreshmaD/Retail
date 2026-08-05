@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 import time
 from dataclasses import dataclass
@@ -1276,6 +1277,10 @@ class MultiIntentExecutionState:
     execution_plan: ExecutionPlan
     selected_product_ids: list[str]
     selected_products: list[dict]
+    comparison_candidates: list[dict]
+    ranking_criteria: list[str]
+    selected_best_product_id: str | None
+    requested_stores: list[str]
     budget_max: float | None
     requested_size: str | None
     requested_color: str | None
@@ -1977,6 +1982,10 @@ def _new_multi_intent_state(plan: ExecutionPlan) -> MultiIntentExecutionState:
         execution_plan=plan,
         selected_product_ids=[],
         selected_products=[],
+        comparison_candidates=[],
+        ranking_criteria=[],
+        selected_best_product_id=None,
+        requested_stores=[plan.requested_store] if plan.requested_store else [],
         budget_max=plan.budget_max,
         requested_size=plan.requested_size,
         requested_color=plan.requested_color,
@@ -2136,6 +2145,9 @@ async def _execute_multi_subgoal(
         await _execute_read_only_tool("recommend_products", args, agent_name="recommend_agent")
         return _finalize_current_evidence(subgoal, original_message)
 
+    if subgoal.intent == "product_comparison":
+        return _finalize_product_comparison(state, subgoal)
+
     if subgoal.intent in {"inventory_availability", "store_availability"}:
         if not state.selected_product_ids:
             return _empty_subgoal_response(subgoal, original_message)
@@ -2243,6 +2255,86 @@ def _store_selected_products(state: MultiIntentExecutionState, products: list[di
     state.selected_product_ids = [product["product_id"] for product in state.selected_products]
 
 
+def _finalize_product_comparison(state: MultiIntentExecutionState, subgoal: PlannedSubIntent) -> FinalizedResponse:
+    state.comparison_candidates = list(state.selected_products)
+    state.ranking_criteria = _comparison_ranking_criteria(state)
+    if not state.comparison_candidates:
+        return FinalizedResponse(
+            reply=_subgoal_limitation(subgoal),
+            products=[],
+            proposed_claims=[],
+            verification_result=type("Verification", (), {"approved_claim_ids": []})(),
+        )
+
+    best = max(state.comparison_candidates, key=lambda product: _comparison_score(product, state))
+    state.selected_best_product_id = best["product_id"]
+    state.selected_products = [best]
+    state.selected_product_ids = [best["product_id"]]
+    return FinalizedResponse(
+        reply=_comparison_reply(best, state),
+        products=[best],
+        proposed_claims=[],
+        verification_result=type("Verification", (), {"approved_claim_ids": []})(),
+    )
+
+
+def _comparison_ranking_criteria(state: MultiIntentExecutionState) -> list[str]:
+    criteria = ["verified product match"]
+    if state.budget_max is not None:
+        criteria.append("budget fit")
+    if any(product.get("rating") is not None for product in state.selected_products):
+        criteria.append("rating")
+    if any(isinstance(product.get("promotion"), dict) for product in state.selected_products):
+        criteria.append("sale price")
+    criteria.append("lower price")
+    return criteria
+
+
+def _comparison_score(product: dict, state: MultiIntentExecutionState) -> tuple:
+    price = _safe_float(product.get("price"))
+    sale_price = _safe_float(product.get("promotion", {}).get("discounted_price")) if isinstance(product.get("promotion"), dict) else None
+    effective_price = sale_price if sale_price is not None else price
+    rating = _safe_float(product.get("rating")) or 0
+    budget_limit = state.budget_max
+    budget_fit = 1 if budget_limit is None or (effective_price is not None and effective_price <= budget_limit) or (price is not None and price <= budget_limit) else 0
+    discount = (price - sale_price) if price is not None and sale_price is not None and sale_price < price else 0
+    return (
+        budget_fit,
+        rating,
+        discount,
+        -(effective_price if effective_price is not None else 10_000),
+        str(product.get("name", "")),
+    )
+
+
+def _comparison_reply(product: dict, state: MultiIntentExecutionState) -> str:
+    name = product.get("name") or product["product_id"]
+    facts = []
+    price = _safe_float(product.get("price"))
+    if price is not None:
+        facts.append(f"priced at ${price:.2f}")
+    promotion = product.get("promotion")
+    sale_price = _safe_float(promotion.get("discounted_price")) if isinstance(promotion, dict) else None
+    if sale_price is not None:
+        facts.append(f"with a sale price of ${sale_price:.2f}")
+    rating = _safe_float(product.get("rating"))
+    if rating is not None:
+        facts.append(f"with a {rating:.1f} rating")
+    basis = ", ".join(state.ranking_criteria)
+    suffix = f" based on {basis}" if basis else ""
+    if facts:
+        return f"I’d pick {name} from the verified options: it is {', '.join(facts)}{suffix}."
+    return f"I’d pick {name} from the verified options{suffix}."
+
+
+def _safe_float(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
 def _has_pending_external_fallback(plan: ExecutionPlan) -> bool:
     return any(subgoal.intent == "external_offer" and subgoal.conditional == "internal_insufficient" for subgoal in plan.subgoals)
 
@@ -2252,6 +2344,7 @@ def _subgoal_limitation(subgoal: PlannedSubIntent) -> str:
         "product_recommendation": "I couldn’t verify product recommendations for that part of the request.",
         "inventory_availability": "I couldn’t verify the requested inventory availability.",
         "store_availability": "I couldn’t verify the requested store availability.",
+        "product_comparison": "I couldn’t compare verified products for that part of the request.",
         "policy_question": "I couldn’t verify the requested policy detail.",
         "order_status": "I couldn’t verify the requested order status.",
         "return_eligibility": "I couldn’t verify return eligibility for that order.",
