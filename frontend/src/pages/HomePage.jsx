@@ -4,7 +4,7 @@ import { useChatWidget } from "../context/ChatWidgetContext";
 import "./HomePage.css";
 
 export default function HomePage() {
-  const { openChatWithMessage } = useChatWidget();
+  const { isOpen: isChatOpen, openChatWithMessage } = useChatWidget();
 
   return (
     <div className="home-page">
@@ -34,6 +34,14 @@ export default function HomePage() {
             <span>Read-only AI tools</span>
             <span>Secure checkout</span>
           </div>
+        </div>
+        <div
+          className={`home-hero-prompt-card ${isChatOpen ? "home-hero-prompt-card--hidden" : ""}`}
+          aria-hidden="true"
+        >
+          <span className="home-hero-prompt-kicker">Try Scout</span>
+          <strong>“Is this available in medium?”</strong>
+          <span>Verified stock answers before checkout.</span>
         </div>
 
       </section>

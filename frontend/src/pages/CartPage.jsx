@@ -22,6 +22,7 @@ export default function CartPage() {
   const [error, setError] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const shippingLabel = total >= 75 ? "Free" : "Free over $75";
+  const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   useEffect(() => {
     if (searchParams.get("checkout") === "1" && items.length > 0 && !checkoutSession && !confirmation) {
@@ -56,7 +57,7 @@ export default function CartPage() {
         order: data.order,
       });
     } catch {
-      setError("Something went wrong starting checkout. Please try again.");
+      setError("We couldn’t start checkout right now. Please try again.");
     } finally {
       setIsStartingCheckout(false);
     }
@@ -130,7 +131,7 @@ export default function CartPage() {
         <p className="cart-eyebrow">Shopping bag</p>
         <h2 className="cart-title">Your Cart</h2>
         <p className="cart-subtitle">
-          {items.length} {items.length === 1 ? "item" : "items"} ready for secure checkout.
+          {itemCount} {itemCount === 1 ? "item" : "items"} ready for secure checkout.
         </p>
       </div>
 
@@ -145,7 +146,7 @@ export default function CartPage() {
                   <p className="cart-item-brand">{item.brand}</p>
                   <p className="cart-item-name">{item.name}</p>
                   <p className="cart-item-price">${item.price.toFixed(2)}</p>
-                  <p className="cart-item-note">Options confirmed during checkout</p>
+                  <p className="cart-item-note">Size and color confirmed during checkout</p>
                 </div>
 
                 <div className="cart-item-qty" aria-label={`Quantity for ${item.name}`}>

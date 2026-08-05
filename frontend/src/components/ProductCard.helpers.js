@@ -67,3 +67,44 @@ export function getImagePresentation(product, imageFailed = false) {
     placeholderAltText: `Image unavailable for ${name}`,
   };
 }
+
+function formatVariantContext(product) {
+  const parts = [product?.color, product?.size]
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter(Boolean);
+  return parts.join(", ");
+}
+
+export function getAvailabilityPresentation(product) {
+  const storeName =
+    typeof product?.store_name === "string" && product.store_name.trim()
+      ? product.store_name.trim()
+      : "";
+  const variantContext = formatVariantContext(product);
+  const inStock =
+    typeof product?.in_stock === "boolean"
+      ? product.in_stock
+      : product?.availability === "in_stock"
+        ? true
+        : product?.availability === "out_of_stock"
+          ? false
+          : null;
+
+  if (inStock === true && storeName) {
+    return { text: `In stock at ${storeName}`, status: "available" };
+  }
+
+  if (inStock === false && variantContext) {
+    return { text: `Out of stock in ${variantContext}`, status: "unavailable" };
+  }
+
+  if (inStock === true) {
+    return { text: "In stock", status: "available" };
+  }
+
+  if (inStock === false) {
+    return { text: "Out of stock", status: "unavailable" };
+  }
+
+  return { text: "Check availability", status: "unchecked" };
+}

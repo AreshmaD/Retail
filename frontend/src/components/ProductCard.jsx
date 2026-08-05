@@ -5,6 +5,7 @@ import { useCart } from "../context/CartContext";
 import { useSavedItems } from "../context/SavedItemsContext";
 import {
   formatCurrency,
+  getAvailabilityPresentation,
   getImagePresentation,
   getPromotionPresentation,
 } from "./ProductCard.helpers";
@@ -24,6 +25,7 @@ export default function ProductCard({ product }) {
   const saved = isSaved(product);
   const promotionPresentation = getPromotionPresentation(product);
   const imagePresentation = getImagePresentation(product, imageFailed);
+  const availabilityPresentation = getAvailabilityPresentation(product);
 
   const resolvedClickUrl = product.click_url
     ? (product.click_url.startsWith("/") ? `${API_BASE}${product.click_url}` : product.click_url)
@@ -189,9 +191,9 @@ export default function ProductCard({ product }) {
         )}
 
         {!isExternal && (
-          <p className="product-card-availability">
+          <p className={`product-card-availability product-card-availability--${availabilityPresentation.status}`}>
             <span className="product-card-availability-dot" />
-            Availability not checked
+            {availabilityPresentation.text}
           </p>
         )}
 
