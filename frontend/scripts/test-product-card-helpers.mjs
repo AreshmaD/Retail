@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   formatCurrency,
+  getAvailabilityPresentation,
   getImagePresentation,
   getPromotionPresentation,
   resolveImageUrl,
@@ -48,6 +49,22 @@ assert.deepEqual(getImagePresentation(product, true), {
   altText: "Wrap Dress",
   showPlaceholder: true,
   placeholderAltText: "Image unavailable for Wrap Dress",
+});
+assert.deepEqual(getAvailabilityPresentation(product), {
+  text: "Check availability",
+  status: "unchecked",
+});
+assert.deepEqual(getAvailabilityPresentation({ ...product, in_stock: true, store_name: "Maple Grove" }), {
+  text: "In stock at Maple Grove",
+  status: "available",
+});
+assert.deepEqual(getAvailabilityPresentation({ ...product, in_stock: false, color: "black", size: "M" }), {
+  text: "Out of stock in black, M",
+  status: "unavailable",
+});
+assert.deepEqual(getAvailabilityPresentation({ ...product, availability: "out_of_stock" }), {
+  text: "Out of stock",
+  status: "unavailable",
 });
 assert.deepEqual(product, {
   product_id: "P003",
