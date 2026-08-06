@@ -44,6 +44,18 @@ def _tool_result(tool_name, args):
             return []
         return PRODUCTS
     if tool_name == "stores":
+        if args["product_id"] == "P003" and not args.get("store_name"):
+            return {
+                "found": True,
+                "product_id": args["product_id"],
+                "requested_store_name": None,
+                "requested_store_had_no_stock": False,
+                "stores": [
+                    {"product_id": "P003", "store_id": "S01", "store_name": "Maple Grove", "quantity": 5, "in_stock": True},
+                    {"product_id": "P003", "store_id": "S02", "store_name": "Downtown Minneapolis", "quantity": 5, "in_stock": True},
+                    {"product_id": "P003", "store_id": "S03", "store_name": "Ridgedale", "quantity": 5, "in_stock": True},
+                ],
+            }
         quantity = 2 if args["product_id"] == "P001" else 0
         return {
             "found": True,
@@ -257,9 +269,63 @@ def test_comparison_selects_best_product_before_store_lookup(monkeypatch):
     assert result.graph_markers == [["product_recommendation", "product_comparison", "store_availability"]]
     assert [call[1] for call in result.calls] == ["recommend_products", "stores"]
     assert result.calls[1][2] == {"product_id": "P003"}
-    assert "I’d pick Wrap Dress from the verified options" in result.reply
-    assert "based on verified product match, budget fit, lower price" in result.reply
-    assert "The Wrap Dress is not currently available at the Maple Grove store." in result.reply
+    assert "Of the 2, I’d pick Wrap Dress. It’s under $80 at $68.00" in result.reply
+    assert "The Wrap Dress is available at Maple Grove, Downtown Minneapolis, and Ridgedale, with 5 units at each store." in result.reply
+
+
+def test_contextual_comparison_reuses_prior_product_cards(monkeypatch):
+    context = {
+        "active_selected_products": [
+            {
+                "product_id": "P003",
+                "name": "Wrap Dress",
+                "price": 68.0,
+                "rating": 4.4,
+                "source": "internal",
+                "promotion": {"discounted_price": 57.8},
+                "image_url": "/static/products/P003.png",
+            },
+            {
+                "product_id": "P004",
+                "name": "Slip Dress",
+                "price": 62.5,
+                "rating": 3.9,
+                "source": "internal",
+                "promotion": {"discounted_price": 53.12},
+            },
+            {
+                "product_id": "P001",
+                "name": "Black Midi Dress",
+                "price": 79.99,
+                "rating": 4.3,
+                "source": "internal",
+                "promotion": {"discounted_price": 67.99},
+            },
+        ],
+    }
+
+    result = _run_with_fake_tools(
+        monkeypatch,
+        "Compare these three dresses, pick the best under $80, and check which stores have it.",
+        conversation_context=context,
+    )
+
+    assert result.graph_markers == [["product_recommendation", "product_comparison", "store_availability"]]
+    assert [call[1] for call in result.calls] == ["stores"]
+    assert result.calls[0][2] == {"product_id": "P003"}
+    assert "Of the 3, I’d pick Wrap Dress. It’s under $80 at $68.00, has the highest rating at 4.4 and its sale price is $57.80." in result.reply
+    assert "The Wrap Dress is available at Maple Grove, Downtown Minneapolis, and Ridgedale, with 5 units at each store." in result.reply
+    assert result.products == [
+        {
+            "product_id": "P003",
+            "name": "Wrap Dress",
+            "source": "internal",
+            "price": 68.0,
+            "rating": 4.4,
+            "promotion": {"discounted_price": 57.8},
+            "image_url": "/static/products/P003.png",
+        }
+    ]
 
 
 def test_comparison_only_uses_verified_products_without_extra_tool_calls(monkeypatch):
@@ -270,7 +336,7 @@ def test_comparison_only_uses_verified_products_without_extra_tool_calls(monkeyp
 
     assert result.graph_markers == [["product_recommendation", "product_comparison"]]
     assert [call[1] for call in result.calls] == ["recommend_products"]
-    assert "I’d pick Wrap Dress from the verified options" in result.reply
+    assert "Of the 2, I’d pick Wrap Dress. It’s under $80 at $68.00" in result.reply
     assert [product["product_id"] for product in result.products] == ["P001", "P003"]
 
 

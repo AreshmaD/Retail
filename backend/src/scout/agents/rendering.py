@@ -426,6 +426,10 @@ def _inventory_sentences(claims: list[ProposedClaim], customer_message: str = ""
     sentences = []
     rendered_subjects = set()
 
+    combined_store_sentence = _combined_store_availability_sentence(records)
+    if combined_store_sentence:
+        return [combined_store_sentence]
+
     for record in records:
         if record["store_name"] and (record["size"] or record["color"]):
             sentence = _exact_store_variant_sentence(record)
@@ -509,6 +513,28 @@ def _exact_store_variant_sentence(record: dict) -> str | None:
     if record["quantity"] is not None:
         return f"{product_label} is available at {record['store_name']} in {variant}, with {record['quantity']} units remaining."
     return f"{product_label} is available at {record['store_name']} in {variant}."
+
+
+def _combined_store_availability_sentence(records: list[dict]) -> str | None:
+    store_records = [
+        record
+        for record in records
+        if record["store_name"]
+        and record["product_id"]
+        and record["quantity"] is not None
+        and record["quantity"] > 0
+        and not (record["size"] or record["color"])
+    ]
+    if len(store_records) < 2:
+        return None
+    product_ids = {record["product_id"] for record in store_records}
+    quantities = {record["quantity"] for record in store_records}
+    if len(product_ids) != 1 or len(quantities) != 1:
+        return None
+    product_label = _product_label(store_records[0]["product_name"])
+    store_names = _join_phrases([record["store_name"] for record in store_records])
+    quantity = store_records[0]["quantity"]
+    return f"{product_label} is available at {store_names}, with {quantity} units at each store."
 
 
 def _store_has_general_inventory_but_variant_unavailable_sentence(variant: dict, store: dict) -> str:

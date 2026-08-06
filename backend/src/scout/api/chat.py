@@ -2,10 +2,11 @@ import json
 import uuid
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sse_starlette.sse import EventSourceResponse
 
 from scout.agents.supervisor import ask, ask_streaming, SPECIALIST_NAMES
+from scout.services.chat_feedback_service import record_chat_feedback
 
 router = APIRouter()
 
@@ -27,6 +28,42 @@ class ChatResponse(BaseModel):
     products: list[dict] = []
 
 
+class ChatFeedbackRequest(BaseModel):
+    session_id: str
+    message_index: int
+    rating: str
+    user_message: str = ""
+    assistant_reply: str = ""
+    products: list[dict] = Field(default_factory=list)
+
+    @field_validator("session_id")
+    @classmethod
+    def session_id_required(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("session_id is required")
+        return value
+
+    @field_validator("message_index")
+    @classmethod
+    def message_index_non_negative(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("message_index must be non-negative")
+        return value
+
+    @field_validator("rating")
+    @classmethod
+    def rating_supported(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"up", "down"}:
+            raise ValueError("rating must be up or down")
+        return normalized
+
+
+class ChatFeedbackResponse(BaseModel):
+    status: str
+    feedback_id: str
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: Request, body: ChatRequest) -> ChatResponse:
     session_id = body.session_id or str(uuid.uuid4())
@@ -45,6 +82,19 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
     SESSION_CONTEXTS[session_id] = conversation_context
 
     return ChatResponse(session_id=session_id, reply=reply, products=products)
+
+
+@router.post("/chat/feedback", response_model=ChatFeedbackResponse)
+async def chat_feedback(body: ChatFeedbackRequest) -> ChatFeedbackResponse:
+    feedback_id = record_chat_feedback(
+        session_id=body.session_id,
+        message_index=body.message_index,
+        rating=body.rating,
+        user_message=body.user_message,
+        assistant_reply=body.assistant_reply,
+        products=body.products,
+    )
+    return ChatFeedbackResponse(status="ok", feedback_id=feedback_id)
 
 
 @router.post("/chat/stream")

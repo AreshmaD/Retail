@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import ForeignKey, String, Float, Integer, DateTime, Boolean
+from sqlalchemy import ForeignKey, String, Float, Integer, DateTime, Boolean, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -129,3 +129,20 @@ class Promotion(Base):
     discount_percent: Mapped[float] = mapped_column(Float, nullable=False)
     label: Mapped[str] = mapped_column(String, default="")            # e.g. "Summer Sale"
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class ChatFeedback(Base):
+    __tablename__ = "chat_feedback"
+
+    feedback_id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    session_id: Mapped[str] = mapped_column(String, nullable=False)
+    message_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    rating: Mapped[str] = mapped_column(String, nullable=False)
+    user_message: Mapped[str] = mapped_column(Text, default="")
+    assistant_reply: Mapped[str] = mapped_column(Text, default="")
+    products_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )

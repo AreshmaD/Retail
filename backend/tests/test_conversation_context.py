@@ -79,7 +79,7 @@ def test_verified_selected_product_becomes_active_context(monkeypatch):
 
     asyncio.run(supervisor.ask(app, [], "Recommend a dress under $80.", conversation_context=context))
 
-    assert context["active_selected_products"] == [{"product_id": "P001", "name": "Black Midi Dress", "source": "internal"}]
+    assert context["active_selected_products"] == [{"product_id": "P001", "name": "Black Midi Dress", "source": "internal", "price": 79.99}]
     assert context["active_product_id"] == "P001"
     assert context["active_product_name"] == "Black Midi Dress"
 

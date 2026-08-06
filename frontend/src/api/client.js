@@ -67,6 +67,20 @@ export async function streamChatMessage(message, sessionId, callbacks = {}) {
   }
 }
 
+export async function sendChatFeedback(feedback) {
+  const response = await fetch(`${BASE_URL}/chat/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(feedback),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Feedback request failed: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 export async function addToCartRequest(productId, quantity = 1) {
   const response = await fetch(`${BASE_URL}/cart/add`, {
     method: "POST",

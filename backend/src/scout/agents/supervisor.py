@@ -427,10 +427,15 @@ def _context_product(product: dict) -> dict | None:
     if not isinstance(product_id, str) or not product_id.strip():
         return None
     output = {"product_id": product_id}
-    if isinstance(product.get("name"), str) and product["name"].strip():
-        output["name"] = product["name"]
-    if product.get("source"):
-        output["source"] = product["source"]
+    for key in ("name", "source", "category", "image_url"):
+        if isinstance(product.get(key), str) and product[key].strip():
+            output[key] = product[key]
+    for key in ("price", "rating"):
+        if product.get(key) is not None:
+            output[key] = product[key]
+    promotion = product.get("promotion")
+    if isinstance(promotion, dict):
+        output["promotion"] = promotion.copy()
     return output
 
 
@@ -2037,6 +2042,7 @@ async def _run_multi_intent_plan(
 ) -> tuple[str, list[dict]]:
     _record_multi_intent_supervisor_path(plan)
     state = _new_multi_intent_state(plan)
+    reused_context_products = _seed_comparison_products_from_context(state, message, conversation_context)
     history.append({"role": "user", "content": message})
     finalized_results: list[FinalizedResponse] = []
     all_products: list[dict] = []
@@ -2044,6 +2050,9 @@ async def _run_multi_intent_plan(
     for index, subgoal in enumerate(plan.subgoals):
         state.current_subgoal = subgoal.intent
         state.next_subgoal = plan.subgoals[index + 1].intent if index + 1 < len(plan.subgoals) else None
+        if reused_context_products and subgoal.intent == "product_recommendation":
+            _record_multi_subgoal(state, subgoal, completed=True)
+            continue
         if subgoal.conditional == "internal_insufficient" and _internal_products_satisfy_explicit_request(
             state.selected_products,
             StructuredIntent(
@@ -2164,8 +2173,9 @@ async def _execute_multi_subgoal(
                 await _execute_read_only_tool("stores", args, agent_name="inventory_agent")
         return _finalize_current_evidence(
             subgoal,
-            original_message,
+            _inventory_context_message(subgoal.text or original_message, state.selected_products),
             extra_evidence=state.evidence_by_specialist.get("recommend_agent", []),
+            products=state.selected_products,
         )
 
     if subgoal.intent == "policy_question":
@@ -2209,8 +2219,10 @@ def _finalize_current_evidence(
     original_message: str,
     *,
     extra_evidence: list | None = None,
+    products: list | None = None,
 ) -> FinalizedResponse:
     evidence_entries = [*(extra_evidence or []), *get_evidence_entries()]
+    has_product_override = products is not None
     if subgoal.intent == "external_offer" and _external_no_match(evidence_entries):
         return FinalizedResponse(
             reply="Scout did not find an internal or verified third-party product matching all requested external-offer constraints.",
@@ -2218,16 +2230,16 @@ def _finalize_current_evidence(
             proposed_claims=[],
             verification_result=type("Verification", (), {"approved_claim_ids": []})(),
         )
-    products = extract_product_candidates(normalized_messages=[], evidence_entries=evidence_entries)
+    products = products if products is not None else extract_product_candidates(normalized_messages=[], evidence_entries=evidence_entries)
     if subgoal.intent == "external_offer":
         products = [product for product in products if product.get("source") == "external"]
-    elif subgoal.intent != "product_recommendation":
+    elif subgoal.intent not in {"product_recommendation", "inventory_availability", "store_availability"}:
         products = []
     return _finalize_verified_response(
         original_reply="",
         products=products,
         evidence_entries=evidence_entries,
-        customer_message=subgoal.text or original_message,
+        customer_message=original_message if has_product_override else (subgoal.text or original_message),
     )
 
 
@@ -2253,6 +2265,52 @@ def _empty_subgoal_response(subgoal: PlannedSubIntent, original_message: str) ->
 def _store_selected_products(state: MultiIntentExecutionState, products: list[dict]) -> None:
     state.selected_products = [product for product in products if isinstance(product, dict) and product.get("product_id")]
     state.selected_product_ids = [product["product_id"] for product in state.selected_products]
+
+
+def _inventory_context_message(message: str, products: list[dict]) -> str:
+    hints = [
+        f"product_id {product['product_id']} ({product['name']})"
+        for product in products
+        if isinstance(product, dict)
+        and isinstance(product.get("product_id"), str)
+        and isinstance(product.get("name"), str)
+    ]
+    if not hints:
+        return message
+    return f"Check pickup availability for {', '.join(hints)}. {message}"
+
+
+def _seed_comparison_products_from_context(
+    state: MultiIntentExecutionState,
+    message: str,
+    conversation_context: dict | None,
+) -> bool:
+    if not _looks_like_contextual_comparison(message):
+        return False
+    if not any(subgoal.intent == "product_comparison" for subgoal in state.execution_plan.subgoals):
+        return False
+    context = _safe_conversation_context(conversation_context)
+    if context is None:
+        return False
+    products = [
+        product
+        for product in context.get("active_selected_products") or []
+        if isinstance(product, dict) and product.get("product_id")
+    ]
+    if len(products) < 2:
+        return False
+    _store_selected_products(state, products)
+    return True
+
+
+def _looks_like_contextual_comparison(message: str) -> bool:
+    normalized = (message or "").lower()
+    context_terms = {"compare these", "compare them", "compare those", "these three", "these 3", "pick the best"}
+    comparison_terms = {"compare", "pick", "best", "rank"}
+    return bool(
+        any(term in normalized for term in context_terms)
+        and any(term in normalized for term in comparison_terms)
+    )
 
 
 def _finalize_product_comparison(state: MultiIntentExecutionState, subgoal: PlannedSubIntent) -> FinalizedResponse:
@@ -2309,22 +2367,34 @@ def _comparison_score(product: dict, state: MultiIntentExecutionState) -> tuple:
 
 def _comparison_reply(product: dict, state: MultiIntentExecutionState) -> str:
     name = product.get("name") or product["product_id"]
-    facts = []
+    scope = f"the {len(state.comparison_candidates)}" if len(state.comparison_candidates) > 1 else "the"
     price = _safe_float(product.get("price"))
-    if price is not None:
-        facts.append(f"priced at ${price:.2f}")
     promotion = product.get("promotion")
     sale_price = _safe_float(promotion.get("discounted_price")) if isinstance(promotion, dict) else None
     if sale_price is not None:
-        facts.append(f"with a sale price of ${sale_price:.2f}")
+        sale_phrase = f" and its sale price is ${sale_price:.2f}"
+    else:
+        sale_phrase = ""
     rating = _safe_float(product.get("rating"))
+    rating_phrase = ""
     if rating is not None:
-        facts.append(f"with a {rating:.1f} rating")
+        if _has_highest_rating(product, state.comparison_candidates):
+            rating_phrase = f", has the highest rating at {rating:.1f}"
+        else:
+            rating_phrase = f", has a {rating:.1f} rating"
+    if price is not None:
+        budget_phrase = f" under ${state.budget_max:.0f}" if state.budget_max is not None and price <= state.budget_max else ""
+        return f"Of {scope}, I’d pick {name}. It’s{budget_phrase} at ${price:.2f}{rating_phrase}{sale_phrase}."
     basis = ", ".join(state.ranking_criteria)
     suffix = f" based on {basis}" if basis else ""
-    if facts:
-        return f"I’d pick {name} from the verified options: it is {', '.join(facts)}{suffix}."
-    return f"I’d pick {name} from the verified options{suffix}."
+    return f"Of {scope}, I’d pick {name}{suffix}."
+
+
+def _has_highest_rating(product: dict, candidates: list[dict]) -> bool:
+    rating = _safe_float(product.get("rating"))
+    candidate_ratings = [_safe_float(candidate.get("rating")) for candidate in candidates]
+    numeric_ratings = [value for value in candidate_ratings if value is not None]
+    return bool(numeric_ratings) and rating is not None and rating >= max(numeric_ratings)
 
 
 def _safe_float(value) -> float | None:
