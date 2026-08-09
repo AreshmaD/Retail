@@ -1360,6 +1360,25 @@ anytime!"). Do NOT hand off to a specialist for a pure closing message.
 This exception applies ONLY when there is truly no question or request
 left to answer — if the message contains BOTH a closing AND a real
 question, hand off to the right specialist as usual.
+
+WRITING THE HANDOFF TASK DESCRIPTION: every hand-off tool requires a
+task_description argument. This description is the ONLY thing the
+specialist will see — it does NOT receive the raw conversation history,
+so it cannot infer anything you leave out. Write a complete, self-
+contained instruction that includes every relevant detail the customer
+has stated so far in this conversation:
+- the exact product/category the customer is asking about
+- any size, color, or budget the customer mentioned, even in an earlier
+  turn of this same conversation
+- any specific store or order ID mentioned
+- what KIND of answer is needed (a recommendation, a stock check, a
+  policy explanation, etc.)
+Write it as a clear, complete instruction, e.g. "Check stock for the
+Black Midi Dress (product P001) in size M, black, and let the customer
+know if it's available." A vague task_description like "check
+availability" gives the specialist nothing to work with and will
+produce a worse answer than if you had included the details you already
+know.
 """
 
 
