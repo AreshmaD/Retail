@@ -1509,6 +1509,71 @@ async def build_supervisor_app():
     return app, tool_manager
 
 
+# ─────────────────────────────────────────────────────────
+# PHASE 3 MIGRATION (in progress) — manual tool-based supervisor
+# New, parallel implementation alongside build_supervisor_app() above.
+# NOT yet wired into ask()/ask_streaming() — exists so it can be
+# tested in complete isolation before any switchover. See
+# docs/phase3-migration-plan.md for full design and rationale.
+# ─────────────────────────────────────────────────────────
+
+async def build_supervisor_app_v2():
+    """Step 1 of the migration: trivial pass-through handoff tools,
+    no task-description logic yet. Goal at this step is ONLY to
+    confirm create_react_agent + manual handoff tools work at all in
+    this project's setup, before adding the real fix.
+    """
+    tool_manager = MCPToolManager()
+    tools = await tool_manager.start()
+    specialists = build_specialists(tools)
+
+    model = get_chat_model()
+
+    handoff_tools = [
+        _make_passthrough_handoff_tool(name)
+        for name in (
+            "recommend_agent",
+            "inventory_agent",
+            "order_agent",
+            "external_offer_agent",
+            "policy_agent",
+        )
+    ]
+
+    supervisor = create_react_agent(
+        model=model,
+        tools=handoff_tools,
+        prompt=SUPERVISOR_PROMPT,
+        name="supervisor",
+    )
+
+    app = supervisor
+    try:
+        app.scout_specialists = specialists
+    except Exception:
+        pass
+    return app, tool_manager
+
+
+def _make_passthrough_handoff_tool(agent_name: str):
+    """STEP 1 ONLY — trivial pass-through, forwards full history
+    unchanged, same as create_supervisor()'s current behavior. This
+    is deliberately NOT the fix yet — it exists only to prove the
+    create_react_agent + Command mechanism works in this project
+    before Step 2 replaces this with the real task-description logic.
+    """
+    from langgraph.types import Command
+    from langgraph.prebuilt import InjectedState
+    from langchain_core.tools import tool as tool_decorator
+    from typing import Annotated
+
+    @tool_decorator(f"transfer_to_{agent_name}")
+    def handoff(state: Annotated[dict, InjectedState]) -> Command:
+        return Command(goto=agent_name, update={"messages": state["messages"]})
+
+    return handoff
+
+
 async def _wait_for(coro, timeout_seconds: float, stage: str):
     try:
         return await asyncio.wait_for(coro, timeout=timeout_seconds)
