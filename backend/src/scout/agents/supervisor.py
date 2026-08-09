@@ -1618,6 +1618,9 @@ async def build_supervisor_app_v3():
     for name, specialist_agent in specialists.items():
         builder.add_node(name, specialist_agent)
     builder.add_edge(START, "supervisor")
+    for name in specialists:
+        builder.add_edge("supervisor", name)
+        builder.add_edge(name, "supervisor")
 
     app = builder.compile()
     try:
