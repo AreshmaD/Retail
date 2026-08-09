@@ -1613,6 +1613,7 @@ def _make_task_description_handoff_tool(agent_name: str):
         return Command(
             goto=agent_name,
             update={"messages": [tool_message, task_message]},
+            graph=Command.PARENT,
         )
 
     return handoff
