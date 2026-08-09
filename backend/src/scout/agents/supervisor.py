@@ -6,7 +6,7 @@ import math
 from typing import Annotated
 
 from langchain_core.tools import tool as tool_decorator, InjectedToolCallId
-from langgraph.prebuilt import InjectedState
+from langgraph.prebuilt import InjectedState, create_react_agent
 from langgraph.types import Command
 import re
 import time
@@ -1554,7 +1554,7 @@ async def build_supervisor_app_v2():
     model = get_chat_model()
 
     handoff_tools = [
-        _make_passthrough_handoff_tool(name)
+        _make_task_description_handoff_tool(name)
         for name in (
             "recommend_agent",
             "inventory_agent",
@@ -1579,19 +1579,28 @@ async def build_supervisor_app_v2():
     return app, tool_manager
 
 
-def _make_passthrough_handoff_tool(agent_name: str):
-    """STEP 1 ONLY — forwards full history unchanged, same as
-    create_supervisor()'s current behavior. Includes a matching tool
-    RESULT message for the handoff call itself (required — LangGraph's
-    message validation raised KeyError on the tool_call_id when this
-    was missing in the first draft, confirmed via direct testing).
-    Still NOT the fix yet — Step 2 replaces the body with the real
-    task-description logic, keeping this same tool-result-completion
-    structure.
+def _make_task_description_handoff_tool(agent_name: str):
+    """STEP 2 — the real fix. The supervisor LLM must provide a
+    task_description argument when calling this tool; that description
+    becomes the ENTIRE message history the target specialist sees,
+    REPLACING (not filtering) whatever came before. This is the direct
+    fix for cross-agent context bleed: the specialist never receives
+    another specialist's raw tool-call traces, because no prior history
+    is forwarded at all — only this one fresh, supervisor-written
+    instruction. See SUPERVISOR_PROMPT's "WRITING THE HANDOFF TASK
+    DESCRIPTION" section for what the supervisor is instructed to
+    include in this description.
     """
-    @tool_decorator(f"transfer_to_{agent_name}")
+    @tool_decorator(
+        f"transfer_to_{agent_name}",
+        description=(
+            f"Hand off to {agent_name}. You MUST provide a complete, "
+            f"self-contained task_description — this specialist will "
+            f"see ONLY this description, not the conversation history."
+        ),
+    )
     def handoff(
-        state: Annotated[dict, InjectedState],
+        task_description: Annotated[str, "Complete, self-contained instruction for the specialist, including every relevant detail already known"],
         tool_call_id: Annotated[str, InjectedToolCallId],
     ) -> Command:
         tool_message = {
@@ -1600,9 +1609,10 @@ def _make_passthrough_handoff_tool(agent_name: str):
             "name": f"transfer_to_{agent_name}",
             "tool_call_id": tool_call_id,
         }
+        task_message = {"role": "user", "content": task_description}
         return Command(
             goto=agent_name,
-            update={"messages": [*state["messages"], tool_message]},
+            update={"messages": [tool_message, task_message]},
         )
 
     return handoff
