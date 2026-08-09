@@ -6,10 +6,18 @@ from scout.db.models import Product
 
 
 class ProductRepository:
+    """Read-only data access for the Product table.
+
+    This is the only place in the codebase that queries Product rows
+    directly — services and API routes go through these methods instead
+    of writing their own queries.
+    """
+
     def __init__(self, session: Session):
         self.session = session
 
     def get_by_id(self, product_id: str) -> Optional[Product]:
+        """Return a single product by its ID, or None if it doesn't exist."""
         return self.session.query(Product).filter_by(product_id=product_id).first()
 
     def find(
@@ -23,6 +31,11 @@ class ProductRepository:
         product_id_filter: Optional[list[str]] = None,
         limit: int = 10,
     ) -> list[Product]:
+        """Search products with any combination of optional filters.
+
+        All filters are ANDed together. `query` does a case-insensitive
+        partial match against name, description, and tags.
+        """
         q = self.session.query(Product)
 
         if product_id_filter is not None:
@@ -47,11 +60,22 @@ class ProductRepository:
 
         return q.limit(limit).all()
 
-    def find_by_category(self, category: str, exclude_product_id: Optional[str] = None, limit: int = 10) -> list[Product]:
+    def find_by_category(
+        self,
+        category: str,
+        exclude_product_id: Optional[str] = None,
+        limit: int = 10,
+    ) -> list[Product]:
+        """Return products in a category, optionally excluding one product
+        (used for "similar products" — don't recommend the item itself).
+        """
         q = self.session.query(Product).filter(Product.category == category)
         if exclude_product_id:
             q = q.filter(Product.product_id != exclude_product_id)
         return q.limit(limit).all()
 
     def get_all(self) -> list[Product]:
+        """Return every product. Used sparingly — prefer find() with filters
+        for anything that could grow large.
+        """
         return self.session.query(Product).all()

@@ -3,8 +3,16 @@ from typing import Optional
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 from sqlalchemy.orm import Session
 
-from scout.db.models import ExternalProduct, AffiliateClick
+from scout.db.models import ExternalProduct
+from scout.repositories.external_product_repository import ExternalProductRepository
+from scout.repositories.affiliate_click_repository import AffiliateClickRepository
 
+
+# ─────────────────────────────────────────────────────────
+# REQUEST / RESPONSE SCHEMAS
+# Pydantic models validate and normalize search filters and offer data
+# at the boundary, rather than passing loose dicts through the pipeline.
+# ─────────────────────────────────────────────────────────
 
 class ExternalOfferSearchFilters(BaseModel):
     query: str = ""
@@ -65,6 +73,15 @@ class StructuredExternalOffer(BaseModel):
         return value
 
 
+# ─────────────────────────────────────────────────────────
+# DEMO CATALOG SUPPLEMENT
+# A small, fixed set of hand-authored offers layered on top of the real
+# database-backed ExternalProduct catalog — used to guarantee specific
+# demo scenarios (e.g. a real waterproof hiking shoe match) always exist
+# regardless of what's currently seeded in the database. Not a pattern
+# intended for production data.
+# ─────────────────────────────────────────────────────────
+
 DEMO_EXTERNAL_OFFERS = {
     "EX010": {
         "external_product_id": "EX010",
@@ -89,7 +106,42 @@ DEMO_EXTERNAL_OFFERS = {
 }
 
 
+# ─────────────────────────────────────────────────────────
+# TAG ENCODING HELPERS
+# ExternalProduct stores flexible attributes as comma-separated
+# "prefix:value" tags (e.g. "waterproof:true", "use:hiking") rather than
+# dedicated columns, so new attribute types don't require a migration.
+# ─────────────────────────────────────────────────────────
+
+def _tag_values(tags: list[str], prefix: str) -> list[str]:
+    """Return every value for a given tag prefix (e.g. all "use:X" tags)."""
+    marker = f"{prefix}:"
+    return [tag[len(marker):].strip().lower() for tag in tags if tag.startswith(marker) and tag[len(marker):].strip()]
+
+
+def _tag_value(tags: list[str], prefix: str) -> str | None:
+    """Return the first value for a given tag prefix, or None."""
+    values = _tag_values(tags, prefix)
+    return values[0] if values else None
+
+
+def _tag_bool(tags: list[str], prefix: str) -> bool | None:
+    """Parse a tag value as a boolean (true/yes/1 vs false/no/0), or
+    None if the tag isn't present or isn't a recognized boolean string.
+    """
+    value = _tag_value(tags, prefix)
+    if value in {"true", "yes", "1"}:
+        return True
+    if value in {"false", "no", "0"}:
+        return False
+    return None
+
+
 def _external_product_to_dict(product: ExternalProduct) -> dict:
+    """Convert an ExternalProduct row (with its tag-encoded attributes)
+    into the same structured offer shape as DEMO_EXTERNAL_OFFERS, so
+    both sources can be filtered and ranked identically downstream.
+    """
     tags = [t.strip() for t in product.tags.split(",") if t.strip()]
     offer = {
         "external_product_id": product.external_product_id,
@@ -116,6 +168,10 @@ def _external_product_to_dict(product: ExternalProduct) -> dict:
     return _validated_offer_dict(offer)
 
 
+# ─────────────────────────────────────────────────────────
+# CATEGORY / QUERY NORMALIZATION
+# ─────────────────────────────────────────────────────────
+
 # Maps loose customer/model phrasing to the actual category values
 # stored in our (small, fixed) mock catalog.
 CATEGORY_SYNONYMS = {
@@ -130,6 +186,10 @@ CATEGORY_SYNONYMS = {
 
 
 def _normalize_category(category: str) -> str:
+    """Map loose phrasing to a real catalog category. Uses a crude
+    singularize (strip trailing 's') rather than a real NLP lemmatizer —
+    good enough for this catalog's small, known vocabulary.
+    """
     key = category.strip().lower().rstrip("s")  # crude singularize
     for phrase, real_category in CATEGORY_SYNONYMS.items():
         phrase_singular = phrase.rstrip("s")
@@ -138,49 +198,34 @@ def _normalize_category(category: str) -> str:
     return category
 
 
-def find_external_alternative(
-    session: Session,
-    category: str,
-    max_price: Optional[float] = None,
-    limit: int = 3,
-    query: str = "",
-    subcategory: str | None = None,
-    use_case: str | None = None,
-    required_attributes: list[str] | str | None = None,
-    waterproof: bool | None = None,
-    color: str | None = None,
-    budget_max: Optional[float] = None,
-    availability_required: bool = True,
-) -> list[dict]:
-    filters = _build_filters(
-        query=query,
-        category=category,
-        subcategory=subcategory,
-        use_case=use_case,
-        required_attributes=required_attributes,
-        waterproof=waterproof,
-        color=color,
-        budget_max=budget_max if budget_max is not None else max_price,
-        availability_required=availability_required,
-    )
-    normalized = _normalize_category(filters.category)
-    q = session.query(ExternalProduct).filter(
-        ExternalProduct.category.ilike(f"%{normalized}%")
-    )
+def _category_from_query(query: str) -> str:
+    """Infer a category from free-text if none was given explicitly."""
+    lowered = (query or "").lower()
+    if "shoe" in lowered or "footwear" in lowered:
+        return "shoes"
+    if "dress" in lowered:
+        return "dresses"
+    return ""
 
-    db_offers = [_external_product_to_dict(p) for p in q.all()]
-    offers_by_id = {offer["external_product_id"]: offer for offer in db_offers}
-    for offer_id, offer in DEMO_EXTERNAL_OFFERS.items():
-        offers_by_id.setdefault(offer_id, _validated_offer_dict(offer))
 
-    candidates = list(offers_by_id.values())
-    filtered = [_annotate_constraints(offer, filters) for offer in candidates]
-    matches = [offer for offer in filtered if _offer_matches(offer, filters)]
-    matches.sort(key=lambda offer: (offer["price"], offer["external_product_id"]))
-    return matches[:limit]
+def _use_case_from_query(query: str) -> str | None:
+    """Infer a use-case (hiking, running, etc.) from free-text."""
+    lowered = (query or "").lower()
+    for use_case in ("hiking", "running", "formal", "casual", "athletic"):
+        if use_case in lowered:
+            return use_case
+    return None
 
+
+# ─────────────────────────────────────────────────────────
+# FILTER BUILDING
+# ─────────────────────────────────────────────────────────
 
 def _build_filters(**kwargs) -> ExternalOfferSearchFilters:
+    """Assemble a validated ExternalOfferSearchFilters from loose
+    keyword args, inferring category/use_case/waterproof from free text
+    when not explicitly provided.
+    """
     query = kwargs.get("query") or ""
     category = kwargs.get("category") or _category_from_query(query)
     required = kwargs.get("required_attributes")
@@ -203,24 +248,12 @@ def _build_filters(**kwargs) -> ExternalOfferSearchFilters:
     )
 
 
-def _category_from_query(query: str) -> str:
-    lowered = (query or "").lower()
-    if "shoe" in lowered or "footwear" in lowered:
-        return "shoes"
-    if "dress" in lowered:
-        return "dresses"
-    return ""
-
-
-def _use_case_from_query(query: str) -> str | None:
-    lowered = (query or "").lower()
-    for use_case in ("hiking", "running", "formal", "casual", "athletic"):
-        if use_case in lowered:
-            return use_case
-    return None
-
+# ─────────────────────────────────────────────────────────
+# MATCHING & ANNOTATION
+# ─────────────────────────────────────────────────────────
 
 def _offer_matches(offer: dict, filters: ExternalOfferSearchFilters) -> bool:
+    """True if an offer satisfies every hard constraint in filters."""
     if filters.category and _normalize_category(offer.get("category", "")) != _normalize_category(filters.category):
         return False
     if filters.subcategory and filters.subcategory.lower() not in str(offer.get("subcategory", "")).lower():
@@ -243,6 +276,10 @@ def _offer_matches(offer: dict, filters: ExternalOfferSearchFilters) -> bool:
 
 
 def _annotate_constraints(offer: dict, filters: ExternalOfferSearchFilters) -> dict:
+    """Attach a human-readable list of which requested constraints this
+    offer actually satisfies — lets the agent explain WHY a match is
+    good, not just present it as a bare result.
+    """
     annotated = dict(offer)
     satisfied = []
     if filters.use_case and filters.use_case in annotated.get("use_cases", []):
@@ -259,6 +296,11 @@ def _annotate_constraints(offer: dict, filters: ExternalOfferSearchFilters) -> d
 
 
 def _requested_constraints(filters: ExternalOfferSearchFilters) -> list[str]:
+    """Human-readable list of every constraint that was actually
+    requested, regardless of whether any offer satisfies it — used for
+    an honest "here's what I was looking for" explanation when nothing
+    matches.
+    """
     constraints = []
     if filters.category:
         constraints.append(filters.category)
@@ -272,34 +314,62 @@ def _requested_constraints(filters: ExternalOfferSearchFilters) -> list[str]:
     return sorted(set(constraints))
 
 
-def _external_candidate_count(session: Session, filters: ExternalOfferSearchFilters) -> int:
-    normalized = _normalize_category(filters.category)
-    db_count = session.query(ExternalProduct).filter(ExternalProduct.category.ilike(f"%{normalized}%")).count() if normalized else session.query(ExternalProduct).count()
-    demo_count = sum(1 for offer in DEMO_EXTERNAL_OFFERS.values() if not normalized or _normalize_category(offer["category"]) == normalized)
-    return db_count + demo_count
-
-
 def _validated_offer_dict(offer: dict) -> dict:
+    """Run a raw offer dict through StructuredExternalOffer for
+    validation, returning a JSON-safe plain dict.
+    """
     return StructuredExternalOffer(**dict(offer)).model_dump(mode="json")
 
 
-def _tag_values(tags: list[str], prefix: str) -> list[str]:
-    marker = f"{prefix}:"
-    return [tag[len(marker):].strip().lower() for tag in tags if tag.startswith(marker) and tag[len(marker):].strip()]
+# ─────────────────────────────────────────────────────────
+# PUBLIC SERVICE FUNCTIONS
+# ─────────────────────────────────────────────────────────
 
+def find_external_alternative(
+    session: Session,
+    category: str,
+    max_price: Optional[float] = None,
+    limit: int = 3,
+    query: str = "",
+    subcategory: str | None = None,
+    use_case: str | None = None,
+    required_attributes: list[str] | str | None = None,
+    waterproof: bool | None = None,
+    color: str | None = None,
+    budget_max: Optional[float] = None,
+    availability_required: bool = True,
+) -> list[dict]:
+    """Find real third-party vendor products matching the given
+    constraints, combining the database-backed catalog with the fixed
+    demo supplement. Used when the internal catalog has no genuine
+    match for a customer's request.
+    """
+    filters = _build_filters(
+        query=query,
+        category=category,
+        subcategory=subcategory,
+        use_case=use_case,
+        required_attributes=required_attributes,
+        waterproof=waterproof,
+        color=color,
+        budget_max=budget_max if budget_max is not None else max_price,
+        availability_required=availability_required,
+    )
+    normalized = _normalize_category(filters.category)
 
-def _tag_value(tags: list[str], prefix: str) -> str | None:
-    values = _tag_values(tags, prefix)
-    return values[0] if values else None
+    ext_repo = ExternalProductRepository(session)
+    db_products = ext_repo.find_by_category(normalized)
+    db_offers = [_external_product_to_dict(p) for p in db_products]
 
+    offers_by_id = {offer["external_product_id"]: offer for offer in db_offers}
+    for offer_id, offer in DEMO_EXTERNAL_OFFERS.items():
+        offers_by_id.setdefault(offer_id, _validated_offer_dict(offer))
 
-def _tag_bool(tags: list[str], prefix: str) -> bool | None:
-    value = _tag_value(tags, prefix)
-    if value in {"true", "yes", "1"}:
-        return True
-    if value in {"false", "no", "0"}:
-        return False
-    return None
+    candidates = list(offers_by_id.values())
+    filtered = [_annotate_constraints(offer, filters) for offer in candidates]
+    matches = [offer for offer in filtered if _offer_matches(offer, filters)]
+    matches.sort(key=lambda offer: (offer["price"], offer["external_product_id"]))
+    return matches[:limit]
 
 
 def log_affiliate_click(
@@ -307,19 +377,17 @@ def log_affiliate_click(
     external_product_id: str,
     session_id: Optional[str] = None,
 ) -> dict:
-    product = (
-        session.query(ExternalProduct)
-        .filter_by(external_product_id=external_product_id)
-        .first()
-    )
+    """Record that a customer followed a link to an external vendor,
+    and return the vendor's real redirect URL.
+    """
+    ext_repo = ExternalProductRepository(session)
+    click_repo = AffiliateClickRepository(session)
+
+    product = ext_repo.get_by_id(external_product_id)
     if not product:
         return {"success": False, "error": "External product not found"}
 
-    click = AffiliateClick(
-        external_product_id=external_product_id,
-        session_id=session_id,
-    )
-    session.add(click)
+    click = click_repo.create(external_product_id=external_product_id, session_id=session_id)
     session.commit()
 
     return {
@@ -332,15 +400,6 @@ def log_affiliate_click(
 
 
 def get_click_stats(session: Session) -> dict:
-    from sqlalchemy import func
-
-    rows = (
-        session.query(
-            ExternalProduct.vendor_name,
-            func.count(AffiliateClick.click_id).label("clicks"),
-        )
-        .join(AffiliateClick, AffiliateClick.external_product_id == ExternalProduct.external_product_id)
-        .group_by(ExternalProduct.vendor_name)
-        .all()
-    )
-    return {"clicks_by_vendor": {vendor: count for vendor, count in rows}}
+    """Return total affiliate clicks grouped by vendor name."""
+    click_repo = AffiliateClickRepository(session)
+    return {"clicks_by_vendor": click_repo.get_click_counts_by_vendor()}

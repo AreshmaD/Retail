@@ -3,8 +3,16 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from scout.db.models import Product, Promotion
+from scout.repositories.product_repository import ProductRepository
+from scout.repositories.promotion_repository import PromotionRepository
 from scout.services.product_service import check_stock
 from scout.services.cache import ttl_cache
+
+# ─────────────────────────────────────────────────────────
+# SCORING WEIGHTS
+# Must sum to 1.0. Each individual score below is bounded 0-1 before
+# weighting, so the final combined score is also bounded 0-1.
+# ─────────────────────────────────────────────────────────
 
 WEIGHTS = {
     "rating": 0.35,
@@ -14,19 +22,24 @@ WEIGHTS = {
 }
 
 
+# ─────────────────────────────────────────────────────────
+# SCORING HELPERS
+# ─────────────────────────────────────────────────────────
+
 def _get_active_promotion(session: Session, product: Product) -> Optional[Promotion]:
-    specific = (
-        session.query(Promotion)
-        .filter_by(product_id=product.product_id, active=True)
-        .first()
-    )
-    if specific:
-        return specific
-    return (
-        session.query(Promotion)
-        .filter_by(category=product.category, active=True)
-        .first()
-    )
+    """Product-specific promotions take priority over category-wide ones.
+
+    NOTE: this duplicates the same lookup logic as
+    product_service._get_active_promotion_dict(). Both exist because one
+    returns the ORM object (needed here for discount_percent access) and
+    the other returns a plain dict — worth consolidating into one shared
+    helper if this drifts further.
+    """
+    promo_repo = PromotionRepository(session)
+    promo = promo_repo.get_for_product(product.product_id)
+    if promo:
+        return promo
+    return promo_repo.get_for_category(product.category)
 
 
 def _score_candidate(
@@ -36,6 +49,10 @@ def _score_candidate(
     target_price: Optional[float],
     promotion: Optional[Promotion],
 ) -> float:
+    """Weighted score combining rating, price-fit-to-budget, whether a
+    promotion is active, and how strong the original semantic search
+    match was (earlier position = stronger match).
+    """
     rating_score = (product.rating or 0) / 5.0
 
     if target_price:
@@ -55,6 +72,10 @@ def _score_candidate(
     )
 
 
+# ─────────────────────────────────────────────────────────
+# PUBLIC SERVICE FUNCTION
+# ─────────────────────────────────────────────────────────
+
 @ttl_cache
 def rank_products(
     session: Session,
@@ -62,11 +83,16 @@ def rank_products(
     target_price: Optional[float] = None,
     top_n: int = 3,
 ) -> list[dict]:
+    """Score and rank a list of semantic-search candidate product IDs,
+    filtering out anything not currently in stock, and return the top N
+    as plain dicts ready for API/tool responses.
+    """
+    product_repo = ProductRepository(session)
     scored = []
     total = len(candidate_product_ids)
 
     for position, product_id in enumerate(candidate_product_ids):
-        product = session.query(Product).filter_by(product_id=product_id).first()
+        product = product_repo.get_by_id(product_id)
         if not product:
             continue
 
