@@ -18,7 +18,7 @@ class Settings:
 
     STRIPE_MCP_KEY: str = os.getenv("STRIPE_MCP_KEY", "")
     STRIPE_MCP_URL: str = os.getenv("STRIPE_MCP_URL", "https://mcp.stripe.com")
-    ENABLE_STRIPE_MCP: bool = _env_bool("ENABLE_STRIPE_MCP", True)
+    ENABLE_STRIPE_MCP: bool = _env_bool("ENABLE_STRIPE_MCP", False)
 
     MODEL_INVOCATION_TIMEOUT_SECONDS: float = float(os.getenv("MODEL_INVOCATION_TIMEOUT_SECONDS", "45"))
     SUB_INTENT_TIMEOUT_SECONDS: float = float(os.getenv("SUB_INTENT_TIMEOUT_SECONDS", "90"))
