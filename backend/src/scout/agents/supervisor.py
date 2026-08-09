@@ -1505,7 +1505,7 @@ def extract_products(messages: list) -> list[dict]:
     return extract_tool_result_candidates(messages)
 
 
-async def build_supervisor_app():
+async def build_supervisor_app_v1_original():
     tool_manager = MCPToolManager()
     tools = await tool_manager.start()
     specialists = build_specialists(tools)
@@ -1579,7 +1579,7 @@ async def build_supervisor_app_v2():
     return app, tool_manager
 
 
-async def build_supervisor_app_v3():
+async def build_supervisor_app():
     """STEP 2, ATTEMPT 2 — v2 revealed that create_react_agent alone
     builds the supervisor as a STANDALONE graph, with no actual parent
     graph containing both supervisor and specialists as nodes for
