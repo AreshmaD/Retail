@@ -3,6 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+from typing import Annotated
+
+from langchain_core.tools import tool as tool_decorator, InjectedToolCallId
+from langgraph.prebuilt import InjectedState
+from langgraph.types import Command
 import re
 import time
 from dataclasses import dataclass
@@ -1565,11 +1570,6 @@ def _make_passthrough_handoff_tool(agent_name: str):
     task-description logic, keeping this same tool-result-completion
     structure.
     """
-    from langgraph.types import Command
-    from langgraph.prebuilt import InjectedState
-    from langchain_core.tools import tool as tool_decorator, InjectedToolCallId
-    from typing import Annotated
-
     @tool_decorator(f"transfer_to_{agent_name}")
     def handoff(
         state: Annotated[dict, InjectedState],
