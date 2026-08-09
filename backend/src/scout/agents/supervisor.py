@@ -1556,20 +1556,35 @@ async def build_supervisor_app_v2():
 
 
 def _make_passthrough_handoff_tool(agent_name: str):
-    """STEP 1 ONLY — trivial pass-through, forwards full history
-    unchanged, same as create_supervisor()'s current behavior. This
-    is deliberately NOT the fix yet — it exists only to prove the
-    create_react_agent + Command mechanism works in this project
-    before Step 2 replaces this with the real task-description logic.
+    """STEP 1 ONLY — forwards full history unchanged, same as
+    create_supervisor()'s current behavior. Includes a matching tool
+    RESULT message for the handoff call itself (required — LangGraph's
+    message validation raised KeyError on the tool_call_id when this
+    was missing in the first draft, confirmed via direct testing).
+    Still NOT the fix yet — Step 2 replaces the body with the real
+    task-description logic, keeping this same tool-result-completion
+    structure.
     """
     from langgraph.types import Command
     from langgraph.prebuilt import InjectedState
-    from langchain_core.tools import tool as tool_decorator
+    from langchain_core.tools import tool as tool_decorator, InjectedToolCallId
     from typing import Annotated
 
     @tool_decorator(f"transfer_to_{agent_name}")
-    def handoff(state: Annotated[dict, InjectedState]) -> Command:
-        return Command(goto=agent_name, update={"messages": state["messages"]})
+    def handoff(
+        state: Annotated[dict, InjectedState],
+        tool_call_id: Annotated[str, InjectedToolCallId],
+    ) -> Command:
+        tool_message = {
+            "role": "tool",
+            "content": f"Successfully transferred to {agent_name}",
+            "name": f"transfer_to_{agent_name}",
+            "tool_call_id": tool_call_id,
+        }
+        return Command(
+            goto=agent_name,
+            update={"messages": [*state["messages"], tool_message]},
+        )
 
     return handoff
 
