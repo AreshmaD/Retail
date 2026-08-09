@@ -1579,6 +1579,54 @@ async def build_supervisor_app_v2():
     return app, tool_manager
 
 
+async def build_supervisor_app_v3():
+    """STEP 2, ATTEMPT 2 — v2 revealed that create_react_agent alone
+    builds the supervisor as a STANDALONE graph, with no actual parent
+    graph containing both supervisor and specialists as nodes for
+    Command(goto=...) to navigate within. Fixed here by explicitly
+    building a real StateGraph with the supervisor AND all 5
+    specialists added as nodes — matching the actual official
+    multi-agent pattern, not a partial version of it.
+    """
+    from langgraph.graph import StateGraph, START, MessagesState
+
+    tool_manager = MCPToolManager()
+    tools = await tool_manager.start()
+    specialists = build_specialists(tools)
+    model = get_chat_model()
+
+    handoff_tools = [
+        _make_task_description_handoff_tool(name)
+        for name in (
+            "recommend_agent",
+            "inventory_agent",
+            "order_agent",
+            "external_offer_agent",
+            "policy_agent",
+        )
+    ]
+
+    supervisor_agent = create_react_agent(
+        model=model,
+        tools=handoff_tools,
+        prompt=SUPERVISOR_PROMPT,
+        name="supervisor",
+    )
+
+    builder = StateGraph(MessagesState)
+    builder.add_node("supervisor", supervisor_agent)
+    for name, specialist_agent in specialists.items():
+        builder.add_node(name, specialist_agent)
+    builder.add_edge(START, "supervisor")
+
+    app = builder.compile()
+    try:
+        app.scout_specialists = specialists
+    except Exception:
+        pass
+    return app, tool_manager
+
+
 def _make_task_description_handoff_tool(agent_name: str):
     """STEP 2 — the real fix. The supervisor LLM must provide a
     task_description argument when calling this tool; that description
