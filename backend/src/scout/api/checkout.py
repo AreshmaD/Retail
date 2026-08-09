@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from scout.db.session import SessionLocal
 from scout.services.order_service import create_order
-from scout.services.payment_service import create_test_payment
+from scout.services.payment_service import create_test_payment, PaymentProcessingError
 
 router = APIRouter()
 
@@ -30,10 +30,13 @@ def checkout(request: CheckoutRequest):
         if not order or not order.get("items"):
             return {"success": False, "error": "Could not create order — check product IDs."}
 
-        payment = create_test_payment(
-            amount_usd=order["total"],
-            description=f"Order {order['order_id']}",
-        )
+        try:
+            payment = create_test_payment(
+                amount_usd=order["total"],
+                description=f"Order {order['order_id']}",
+            )
+        except PaymentProcessingError as e:
+            return {"success": False, "error": str(e)}
 
         return {"success": True, "order": order, "payment": payment}
     finally:
