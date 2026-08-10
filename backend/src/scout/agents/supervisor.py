@@ -1505,7 +1505,7 @@ def extract_products(messages: list) -> list[dict]:
     return extract_tool_result_candidates(messages)
 
 
-async def build_supervisor_app_v1_original():
+async def build_supervisor_app():
     tool_manager = MCPToolManager()
     tools = await tool_manager.start()
     specialists = build_specialists(tools)
@@ -1579,7 +1579,7 @@ async def build_supervisor_app_v2():
     return app, tool_manager
 
 
-async def build_supervisor_app():
+async def build_supervisor_app_v3():
     """STEP 2, ATTEMPT 2 — v2 revealed that create_react_agent alone
     builds the supervisor as a STANDALONE graph, with no actual parent
     graph containing both supervisor and specialists as nodes for
@@ -1652,8 +1652,30 @@ def _make_task_description_handoff_tool(agent_name: str):
     )
     def handoff(
         task_description: Annotated[str, "Complete, self-contained instruction for the specialist, including every relevant detail already known"],
+        state: Annotated[dict, InjectedState],
         tool_call_id: Annotated[str, InjectedToolCallId],
     ) -> Command:
+        from langgraph.graph.message import RemoveMessage
+        # Root cause of the BadRequestError: with Command.PARENT, there
+        # is only ONE shared MessagesState (the parent's) — there is no
+        # separate per-specialist state to give a clean view. Simply
+        # APPENDING (the reducer's default) left every prior tool_use/
+        # tool_result pair from earlier in the conversation still
+        # present when the specialist made its own first model call,
+        # and Claude's API strictly requires every tool_result to
+        # immediately follow its tool_use in the PREVIOUS message —
+        # a requirement that broke once unrelated older pairs were
+        # still mixed into what the specialist's call actually sent.
+        #
+        # Fix: remove every prior message (clearing this history from
+        # the SHARED parent state), then add back exactly one valid,
+        # self-contained pair: this handoff's own tool_use (already
+        # implicitly satisfied by the supervisor's call) and its
+        # tool_result, plus the fresh task description. This keeps
+        # the parent state's own bookkeeping valid (the one pair that
+        # remains is genuinely complete) while ensuring the specialist
+        # sees nothing else.
+        removals = [RemoveMessage(id=m.id) for m in state["messages"] if getattr(m, "id", None)]
         tool_message = {
             "role": "tool",
             "content": f"Successfully transferred to {agent_name}",
@@ -1663,7 +1685,7 @@ def _make_task_description_handoff_tool(agent_name: str):
         task_message = {"role": "user", "content": task_description}
         return Command(
             goto=agent_name,
-            update={"messages": [tool_message, task_message]},
+            update={"messages": [*removals, tool_message, task_message]},
             graph=Command.PARENT,
         )
 
