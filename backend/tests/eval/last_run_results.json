@@ -4,8 +4,8 @@
     "description": "Product recommendation under budget",
     "passed": true,
     "failures": [],
-    "reply": "I found 2 Scout dresses: Slip Dress for $62.50 and Black Midi Dress for $79.99. Sale prices are shown on the cards.",
-    "product_count": 2
+    "reply": "I found 3 Scout dresses: Wrap Dress for $68.00, Slip Dress for $62.50, and Black Midi Dress for $79.99. Sale prices are shown on the cards.",
+    "product_count": 3
   },
   {
     "id": "TC-02",
@@ -118,7 +118,7 @@
         "query": "What about something for hiking specifically?",
         "passed": true,
         "failures": [],
-        "reply": "I'd love to help you find hiking shoes! What's your budget?"
+        "reply": "I found 2 Scout options: Hiking Boots for $110.00 and Leather Sneakers for $89.99."
       }
     ]
   },
@@ -133,7 +133,7 @@
         "query": "Recommend a dress under $80",
         "passed": true,
         "failures": [],
-        "reply": "I found 2 Scout dresses: Slip Dress for $62.50 and Black Midi Dress for $79.99. Sale prices are shown on the cards."
+        "reply": "I found 3 Scout dresses: Wrap Dress for $68.00, Slip Dress for $62.50, and Black Midi Dress for $79.99. Sale prices are shown on the cards."
       },
       {
         "turn": 2,
