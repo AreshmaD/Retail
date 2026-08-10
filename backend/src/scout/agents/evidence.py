@@ -805,16 +805,32 @@ def _normalize_store_facts(facts: dict[str, Any]) -> dict[str, Any]:
     bug was in when the filter got applied, not in this function.
     """
     product_id = facts.get("product_id")
-    normalized = {key: facts[key] for key in ("product_id", "found", "requested_store_had_no_stock") if key in facts}
+    normalized = {
+        key: facts[key]
+        for key in (
+            "product_id",
+            "found",
+            "requested_store_had_no_stock",
+            "requested_store_name",
+            "requested_size",
+            "requested_color",
+            "variant_available",
+        )
+        if key in facts
+    }
     stores = facts.get("stores") if isinstance(facts.get("stores"), list) else facts.get("items")
     items = []
     if isinstance(stores, list):
         for store in stores:
             if not isinstance(store, dict):
                 continue
-            item = {key: store[key] for key in ("product_id", "product_name", "name", "store_id", "store_name", "address", "quantity", "in_stock", "available", "pickup_available", "distance_miles") if key in store}
+            item = {key: store[key] for key in ("product_id", "product_name", "name", "store_id", "store_name", "address", "quantity", "in_stock", "available", "pickup_available", "distance_miles", "size", "color") if key in store}
             if product_id is not None:
                 item["product_id"] = product_id
+            if facts.get("requested_size") and "size" not in item:
+                item["size"] = facts["requested_size"]
+            if facts.get("requested_color") and "color" not in item:
+                item["color"] = facts["requested_color"]
             if "quantity" in item:
                 item["in_stock"] = bool(item["quantity"])
             elif "available" in item and "in_stock" not in item:
@@ -823,14 +839,32 @@ def _normalize_store_facts(facts: dict[str, Any]) -> dict[str, Any]:
                 items.append(item)
     if items:
         normalized["stores"] = items
+    elif facts.get("variant_available") is False or (
+        not items
+        and (facts.get("requested_size") or facts.get("size") or facts.get("requested_color") or facts.get("color"))
+    ):
+        normalized["in_stock"] = False
+        normalized["quantity"] = 0
+        requested_size = facts.get("requested_size") or facts.get("size")
+        requested_color = facts.get("requested_color") or facts.get("color")
+        if requested_size:
+            normalized["size"] = requested_size
+        if requested_color:
+            normalized["color"] = requested_color
     return normalized
 
 
 def _normalize_fulfillment_facts(facts: dict[str, Any]) -> dict[str, Any]:
     """Normalize fulfillment_options() results: backfills product_id
-    onto each pickup location.
+    onto each pickup location and flattens delivery fields for claim
+    proposal.
     """
     product_id = facts.get("product_id")
+    normalized = {
+        key: facts[key]
+        for key in ("product_id", "found", "requested_size", "requested_color")
+        if key in facts
+    }
     pickup = facts.get("pickup")
     if isinstance(pickup, dict):
         locations = pickup.get("locations")
@@ -841,7 +875,21 @@ def _normalize_fulfillment_facts(facts: dict[str, Any]) -> dict[str, Any]:
                 else location
                 for location in locations
             ]
-    return facts
+        normalized["pickup"] = pickup
+    delivery = facts.get("delivery")
+    if isinstance(delivery, dict):
+        if "available" in delivery:
+            normalized["delivery_available"] = bool(delivery["available"])
+        for source_key, target_key in (
+            ("standard_estimate", "delivery_estimate"),
+            ("quantity", "quantity"),
+            ("size", "size"),
+            ("color", "color"),
+        ):
+            if source_key in delivery:
+                normalized[target_key] = delivery[source_key]
+        normalized["delivery"] = delivery
+    return normalized
 
 
 # ─────────────────────────────────────────────────────────
@@ -899,6 +947,15 @@ def _attach_validated_context(tool_name: str, facts: dict[str, Any], args: dict[
     if tool_name in {"stores", "fulfillment_options"}:
         if args.get("product_id") and "product_id" not in facts:
             facts["product_id"] = args["product_id"]
+        if args.get("size") and "requested_size" not in facts:
+            facts["requested_size"] = args["size"]
+        if args.get("color") and "requested_color" not in facts:
+            facts["requested_color"] = args["color"]
+        if tool_name == "fulfillment_options":
+            if args.get("size") and "size" not in facts:
+                facts["size"] = args["size"]
+            if args.get("color") and "color" not in facts:
+                facts["color"] = args["color"]
         if args.get("store_id") and "store_id" not in facts:
             facts["store_id"] = args["store_id"]
         if args.get("store_name") and "requested_store_name" not in facts:
@@ -911,8 +968,23 @@ def _attach_validated_context(tool_name: str, facts: dict[str, Any], args: dict[
                     item["store_id"] = args["store_id"]
                 if args.get("store_name") and "store_name" not in item:
                     item["store_name"] = args["store_name"]
+                if args.get("size") and "size" not in item:
+                    item["size"] = args["size"]
+                if args.get("color") and "color" not in item:
+                    item["color"] = args["color"]
         if isinstance(facts.get("stores"), list) and not facts.get("requested_store_had_no_stock"):
             facts["stores"] = _filter_store_rows(facts["stores"], args)
+        if (
+            tool_name == "stores"
+            and not facts.get("stores")
+            and (args.get("size") or args.get("color"))
+        ):
+            facts["in_stock"] = False
+            facts["quantity"] = 0
+            if args.get("size"):
+                facts["size"] = args["size"]
+            if args.get("color"):
+                facts["color"] = args["color"]
     return facts
 
 
