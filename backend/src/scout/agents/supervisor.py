@@ -25,10 +25,7 @@ from scout.agents.diagnostics import (
 from scout.agents.model_provider import get_chat_model
 from scout.agents.orchestration.graph_factory import (
     SUPERVISOR_PROMPT,
-    _make_task_description_handoff_tool,
     build_supervisor_app,
-    build_supervisor_app_v2,
-    build_supervisor_app_v3,
 )
 from scout.agents.intent_splitter import (
     ExecutionPlan,
