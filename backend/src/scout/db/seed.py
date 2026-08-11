@@ -86,11 +86,34 @@ COLOR_MAP = {
 }
 
 
+def _ensure_stock(session, product_id: str, size: str, color: str, quantity: int) -> None:
+    rows = session.query(Stock).filter_by(
+        product_id=product_id,
+        size=size,
+        color=color,
+    ).all()
+    if not rows:
+        session.add(Stock(product_id=product_id, size=size, color=color, quantity=quantity))
+        return
+    for row in rows:
+        row.quantity = quantity
+
+
+def _ensure_demo_variant_inventory(session) -> None:
+    # Preserve the canonical demo case while keeping variant inventory data
+    # internally consistent for product-detail/cart validation.
+    _ensure_stock(session, product_id="P001", size="S", color="black", quantity=3)
+    _ensure_stock(session, product_id="P001", size="M", color="black", quantity=0)
+    _ensure_stock(session, product_id="P001", size="L", color="black", quantity=3)
+
+
 def seed() -> None:
     init_db()
     session = SessionLocal()
 
     if session.query(Product).first():
+        _ensure_demo_variant_inventory(session)
+        session.commit()
         print("Database already seeded — skipping.")
         session.close()
         return
@@ -112,7 +135,7 @@ def seed() -> None:
             session.add(Stock(product_id=pid, size=size, color=color, quantity=next(qty_cycle)))
 
     # preserve known test case: Black Midi Dress, size M, black = OUT OF STOCK
-    session.add(Stock(product_id="P001", size="M", color="black", quantity=0))
+    _ensure_demo_variant_inventory(session)
 
     # ── stores ──
     stores = [

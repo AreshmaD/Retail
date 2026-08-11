@@ -7,6 +7,21 @@ from sqlalchemy.orm import Session
 from scout.repositories.order_repository import OrderRepository
 from scout.repositories.product_repository import ProductRepository
 
+AUTH_REQUIRED_ERROR = "authentication_required"
+UNAUTHORIZED_ORDER_ERROR = "order_access_denied"
+
+
+def _order_access_denied(order_id: str | None = None, *, reason: str = AUTH_REQUIRED_ERROR) -> dict:
+    response = {
+        "found": False,
+        "authorized": False,
+        "error_code": reason,
+        "message": "Sign in to view order details.",
+    }
+    if order_id:
+        response["order_id"] = order_id
+    return response
+
 
 def _order_to_dict(order_id: str, session: Session) -> dict:
     order_repo = OrderRepository(session)
@@ -41,10 +56,42 @@ def get_order(session: Session, order_id: str) -> Optional[dict]:
     return _order_to_dict(order_id, session) if order else None
 
 
+def get_order_for_customer(session: Session, order_id: str, authenticated_customer_id: str | None) -> dict:
+    """Return order details only when a trusted authenticated customer owns it.
+
+    `authenticated_customer_id` must come from the application/auth layer,
+    never from an LLM-generated tool argument or customer-provided prose.
+    """
+    if not authenticated_customer_id:
+        return _order_access_denied(order_id)
+
+    order_repo = OrderRepository(session)
+    order = order_repo.get_by_id(order_id)
+    if not order:
+        return {"found": False, "order_id": order_id}
+    if order.customer_id != authenticated_customer_id:
+        return _order_access_denied(order_id, reason=UNAUTHORIZED_ORDER_ERROR)
+    result = _order_to_dict(order_id, session)
+    result["found"] = True
+    result["authorized"] = True
+    return result
+
+
 def list_orders_for_customer(session: Session, customer_id: str) -> list[dict]:
     order_repo = OrderRepository(session)
     orders = order_repo.find_by_customer(customer_id)
     return [_order_to_dict(o.order_id, session) for o in orders]
+
+
+def list_orders_for_authenticated_customer(session: Session, authenticated_customer_id: str | None) -> dict:
+    if not authenticated_customer_id:
+        return _order_access_denied()
+    return {
+        "found": True,
+        "authorized": True,
+        "customer_id": authenticated_customer_id,
+        "orders": list_orders_for_customer(session, authenticated_customer_id),
+    }
 
 
 def create_order(
@@ -130,3 +177,14 @@ def check_return_eligibility(session: Session, order_id: str) -> dict:
             f"those."
         ),
     }
+
+
+def check_return_eligibility_for_customer(
+    session: Session,
+    order_id: str,
+    authenticated_customer_id: str | None,
+) -> dict:
+    authorized_order = get_order_for_customer(session, order_id, authenticated_customer_id)
+    if not authorized_order.get("authorized"):
+        return authorized_order
+    return check_return_eligibility(session, order_id)

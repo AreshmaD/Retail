@@ -1,11 +1,12 @@
 import json
 import uuid
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from sse_starlette.sse import EventSourceResponse
 
 from scout.agents.supervisor import ask, ask_streaming, SPECIALIST_NAMES
+from scout.config import settings
 from scout.services.chat_feedback_service import record_chat_feedback
 
 router = APIRouter()
@@ -62,6 +63,58 @@ class ChatFeedbackRequest(BaseModel):
 class ChatFeedbackResponse(BaseModel):
     status: str
     feedback_id: str
+
+
+class DemoAuthRequest(BaseModel):
+    customer_id: str
+    session_id: str | None = None
+
+
+class DemoAuthSignOutRequest(BaseModel):
+    session_id: str | None = None
+
+
+class DemoAuthResponse(BaseModel):
+    session_id: str
+    authenticated_customer_id: str | None = None
+    demo_auth_enabled: bool
+
+
+@router.post("/demo-auth/sign-in", response_model=DemoAuthResponse)
+async def demo_auth_sign_in(body: DemoAuthRequest) -> DemoAuthResponse:
+    if not settings.demo_auth_enabled:
+        raise HTTPException(status_code=404, detail="Demo auth is disabled.")
+    customer_id = body.customer_id.strip()
+    if customer_id not in settings.demo_customer_ids:
+        raise HTTPException(status_code=400, detail="Unknown demo customer.")
+
+    session_id = body.session_id or str(uuid.uuid4())
+    context = SESSION_CONTEXTS.get(session_id, {})
+    context["authenticated_customer_id"] = customer_id
+    context["demo_authenticated"] = True
+    SESSION_CONTEXTS[session_id] = context
+    SESSION_HISTORIES.setdefault(session_id, [])
+    return DemoAuthResponse(
+        session_id=session_id,
+        authenticated_customer_id=customer_id,
+        demo_auth_enabled=True,
+    )
+
+
+@router.post("/demo-auth/sign-out", response_model=DemoAuthResponse)
+async def demo_auth_sign_out(body: DemoAuthSignOutRequest) -> DemoAuthResponse:
+    if not settings.demo_auth_enabled:
+        raise HTTPException(status_code=404, detail="Demo auth is disabled.")
+    session_id = body.session_id or str(uuid.uuid4())
+    context = SESSION_CONTEXTS.get(session_id, {})
+    context.pop("authenticated_customer_id", None)
+    context.pop("demo_authenticated", None)
+    SESSION_CONTEXTS[session_id] = context
+    return DemoAuthResponse(
+        session_id=session_id,
+        authenticated_customer_id=None,
+        demo_auth_enabled=True,
+    )
 
 
 @router.post("/chat", response_model=ChatResponse)

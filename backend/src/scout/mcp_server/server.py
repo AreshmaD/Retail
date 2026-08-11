@@ -1,3 +1,4 @@
+from contextvars import ContextVar
 from typing import Union
 
 from mcp.server.fastmcp import FastMCP
@@ -6,13 +7,34 @@ from scout.db.session import SessionLocal
 from scout.db.models import Product
 from scout.services.product_service import search_products, check_stock, find_alternatives
 from scout.services.store_service import check_store_stock, get_fulfillment_options
-from scout.services.order_service import get_order, list_orders_for_customer, check_return_eligibility
+from scout.services.order_service import (
+    check_return_eligibility_for_customer,
+    get_order_for_customer,
+    list_orders_for_authenticated_customer,
+)
 from scout.services.ranking_service import rank_products
 from scout.services.affiliate_service import find_external_alternative
 from scout.rag.vector_store import retrieve_policy_chunks as _retrieve_policy_chunks
 from scout.rag.product_embeddings import semantic_search_products
 
 mcp = FastMCP("scout-tools")
+_AUTHENTICATED_CUSTOMER_ID: ContextVar[str | None] = ContextVar(
+    "scout_authenticated_customer_id",
+    default=None,
+)
+
+
+def set_authenticated_customer_id(customer_id: str | None):
+    return _AUTHENTICATED_CUSTOMER_ID.set(customer_id)
+
+
+def reset_authenticated_customer_id(token) -> None:
+    _AUTHENTICATED_CUSTOMER_ID.reset(token)
+
+
+def _authenticated_customer_id() -> str | None:
+    customer_id = _AUTHENTICATED_CUSTOMER_ID.get()
+    return customer_id if isinstance(customer_id, str) and customer_id.strip() else None
 
 
 def _to_float(value, default: float = 0) -> float:
@@ -216,17 +238,50 @@ def stock(product_id: str, size: str = "", color: str = "") -> dict:
 
 
 @mcp.tool()
-def alternatives(product_id: str, limit: Union[str, int] = 3) -> list[dict]:
-    """Find in-stock alternative products in the same category."""
+def alternatives(
+    product_id: str,
+    limit: Union[str, int] = 3,
+    size: str = "",
+    color: str = "",
+    max_price: Union[str, float] = 0,
+    category: str = "",
+) -> dict:
+    """Find in-stock internal alternative products in the same category,
+    optionally constrained to an exact size/color variant and max price."""
     session = SessionLocal()
     try:
-        return find_alternatives(session, product_id, limit=int(_to_float(limit, 3)))
+        items = find_alternatives(
+            session,
+            product_id,
+            limit=int(_to_float(limit, 3)),
+            size=size or None,
+            color=color or None,
+            max_price=_to_float(max_price) or None,
+            category=category or None,
+        )
+        return {
+            "product_id": product_id,
+            "items": items,
+            "match_count": len(items),
+            "candidate_count": len(items),
+            "filters": {
+                "size": size or None,
+                "color": color or None,
+                "max_price": _to_float(max_price) or None,
+                "category": category or None,
+            },
+        }
     finally:
         session.close()
 
 
 @mcp.tool()
-def fulfillment_options(product_id: str, store_name: str = "") -> dict:
+def fulfillment_options(
+    product_id: str,
+    store_name: str = "",
+    size: str = "",
+    color: str = "",
+) -> dict:
     """Check available fulfillment methods for a product: real store
     pickup locations with actual stock, and a delivery estimate grounded
     in our real shipping policy (3-5 business days standard, free over
@@ -235,31 +290,44 @@ def fulfillment_options(product_id: str, store_name: str = "") -> dict:
     date, only the general timeframe."""
     session = SessionLocal()
     try:
-        return get_fulfillment_options(session, product_id, store_name=store_name or None)
+        return get_fulfillment_options(
+            session,
+            product_id,
+            store_name=store_name or None,
+            size=size or None,
+            color=color or None,
+        )
     finally:
         session.close()
 
 
 @mcp.tool()
-def stores(product_id: str, store_name: str = "") -> dict:
+def stores(product_id: str, store_name: str = "", size: str = "", color: str = "") -> dict:
     """Check store-level stock for a product, optionally filtered to a
     named store. Leave store_name empty to check all stores."""
     session = SessionLocal()
     try:
-        return check_store_stock(session, product_id, store_name=store_name or None)
+        return check_store_stock(
+            session,
+            product_id,
+            store_name=store_name or None,
+            size=size or None,
+            color=color or None,
+        )
     finally:
         session.close()
 
 
 @mcp.tool()
-def order_history(customer_id: str) -> list[dict]:
-    """Look up all past orders for a customer ID. Read-only, same as
-    `orders`. NOTE: there is no real authentication in this system — the
-    customer must state their own customer ID for this to work (e.g.
-    "I'm customer C001"). Never guess or assume a customer_id."""
+def order_history() -> dict:
+    """Look up past orders for the authenticated customer.
+
+    Read-only. This demo currently has no connected authentication layer,
+    so the tool fails closed instead of trusting a customer-stated ID.
+    """
     session = SessionLocal()
     try:
-        return list_orders_for_customer(session, customer_id)
+        return list_orders_for_authenticated_customer(session, authenticated_customer_id=_authenticated_customer_id())
     finally:
         session.close()
 
@@ -276,7 +344,11 @@ def return_eligibility(order_id: str) -> dict:
     tool's own "likely_eligible" field and "reason" explanation."""
     session = SessionLocal()
     try:
-        return check_return_eligibility(session, order_id)
+        return check_return_eligibility_for_customer(
+            session,
+            order_id,
+            authenticated_customer_id=_authenticated_customer_id(),
+        )
     finally:
         session.close()
 
@@ -284,12 +356,12 @@ def return_eligibility(order_id: str) -> dict:
 @mcp.tool()
 def orders(order_id: str) -> dict:
     """Look up an order by its order ID. Read-only — does not create,
-    modify, or cancel orders. Order creation happens only via the
+    modify, or cancel orders. Requires an authenticated customer context;
+    without one it fails closed. Order creation happens only via the
     deterministic POST /checkout REST route, never through an agent."""
     session = SessionLocal()
     try:
-        result = get_order(session, order_id)
-        return result if result else {"found": False, "order_id": order_id}
+        return get_order_for_customer(session, order_id, authenticated_customer_id=_authenticated_customer_id())
     finally:
         session.close()
 

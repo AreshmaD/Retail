@@ -3,7 +3,13 @@ from typing import Optional
 from fastapi import APIRouter, Query
 
 from scout.db.session import SessionLocal
-from scout.services.product_service import search_products, get_product, find_alternatives
+from scout.services.product_service import (
+    check_stock,
+    find_alternatives,
+    get_product,
+    get_product_variant_options,
+    search_products,
+)
 from scout.services.affiliate_service import find_external_alternative
 
 router = APIRouter()
@@ -60,7 +66,22 @@ def get_product_detail(product_id: str):
         product = get_product(session, product_id)
         if not product:
             return {"error": "Product not found"}
+        product["variants"] = get_product_variant_options(session, product_id)
         return product
+    finally:
+        session.close()
+
+
+@router.get("/products/{product_id}/stock")
+def get_product_stock(
+    product_id: str,
+    size: Optional[str] = Query(default=None),
+    color: Optional[str] = Query(default=None),
+):
+    """Exact deterministic variant inventory lookup for product-detail UI."""
+    session = SessionLocal()
+    try:
+        return check_stock(session, product_id, size=size, color=color)
     finally:
         session.close()
 

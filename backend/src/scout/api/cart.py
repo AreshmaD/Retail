@@ -11,6 +11,17 @@ router = APIRouter()
 class AddToCartRequest(BaseModel):
     product_id: str
     quantity: int = 1
+    size: str | None = None
+    color: str | None = None
+
+
+def _variant_label(product_name: str, color: str | None, size: str | None) -> str:
+    details = []
+    if color:
+        details.append(color.title())
+    if size:
+        details.append(f"size {size}")
+    return f"{product_name} in {', '.join(details)}" if details else product_name
 
 
 @router.post("/cart/add")
@@ -30,12 +41,35 @@ def add_to_cart(request: AddToCartRequest):
         if not product:
             return {"success": False, "error": "Product not found"}
 
-        stock_info = check_stock(session, request.product_id)
+        if request.quantity < 1:
+            return {"success": False, "error": "Quantity must be at least 1"}
+
+        stock_info = check_stock(
+            session,
+            request.product_id,
+            size=request.size,
+            color=request.color,
+        )
+        requested_variant = bool(request.size or request.color)
         if not stock_info["in_stock"]:
+            error = "Out of stock"
+            if requested_variant:
+                error = f"{_variant_label(product.name, stock_info['requested_color'], stock_info['requested_size'])} is currently out of stock."
             return {
                 "success": False,
-                "error": "Out of stock",
+                "error": error,
                 "in_stock": False,
+            }
+
+        if request.quantity > stock_info["total_quantity"]:
+            return {
+                "success": False,
+                "error": (
+                    f"Only {stock_info['total_quantity']} available for "
+                    f"{_variant_label(product.name, stock_info['requested_color'], stock_info['requested_size'])}."
+                ),
+                "in_stock": True,
+                "available_quantity": stock_info["total_quantity"],
             }
 
         promotion = _get_active_promotion_dict(session, product)
@@ -52,6 +86,9 @@ def add_to_cart(request: AddToCartRequest):
             "quantity": request.quantity,
             "line_total": round(unit_price * request.quantity, 2),
             "promotion": promotion,
+            "size": stock_info["requested_size"],
+            "color": stock_info["requested_color"],
+            "available_quantity": stock_info["total_quantity"],
         }
     finally:
         session.close()

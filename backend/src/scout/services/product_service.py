@@ -229,6 +229,19 @@ def get_product(session: Session, product_id: str) -> Optional[dict]:
     return _product_to_dict(product, session) if product else None
 
 
+def get_product_variant_options(session: Session, product_id: str) -> list[dict]:
+    stock_repo = StockRepository(session)
+    return [
+        {
+            "size": variant.size,
+            "color": variant.color,
+            "quantity": variant.quantity,
+            "in_stock": variant.quantity > 0,
+        }
+        for variant in stock_repo.get_variants(product_id)
+    ]
+
+
 def check_stock(
     session: Session,
     product_id: str,
@@ -291,23 +304,50 @@ def check_stock(
 
 
 def find_alternatives(
-    session: Session, product_id: str, limit: int = 3
+    session: Session,
+    product_id: str,
+    limit: int = 3,
+    size: Optional[str] = None,
+    color: Optional[str] = None,
+    max_price: Optional[float] = None,
+    category: Optional[str] = None,
 ) -> list[dict]:
     product_repo = ProductRepository(session)
     product = product_repo.get_by_id(product_id)
     if not product:
         return []
 
+    requested_size = _normalize_size(size)
+    requested_color = color.strip().lower() if isinstance(color, str) and color.strip() else None
+    target_category = category or product.category
     candidates = product_repo.find_by_category(
-        product.category, exclude_product_id=product_id, limit=limit * 2
+        target_category, exclude_product_id=product_id, limit=limit * 6
     )
 
-    alternatives = []
+    matching_color = []
+    fallback_color = []
     for c in candidates:
-        stock_info = check_stock(session, c.product_id)
+        if max_price is not None and c.price > max_price:
+            continue
+        stock_info = check_stock(
+            session,
+            c.product_id,
+            size=requested_size,
+            color=requested_color,
+        )
         if stock_info["in_stock"]:
-            alternatives.append(_product_to_dict(c, session))
-        if len(alternatives) >= limit:
+            product_dict = _product_to_dict(c, session)
+            product_dict["variant_stock"] = {
+                "size": stock_info.get("requested_size"),
+                "color": stock_info.get("requested_color"),
+                "quantity": stock_info.get("total_quantity"),
+                "in_stock": stock_info.get("in_stock"),
+            }
+            if requested_color and requested_color in (c.tags or "").lower():
+                matching_color.append(product_dict)
+            else:
+                fallback_color.append(product_dict)
+        if len(matching_color) >= limit:
             break
 
-    return alternatives
+    return [*matching_color, *fallback_color][:limit]

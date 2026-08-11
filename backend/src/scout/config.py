@@ -13,6 +13,8 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 class Settings:
+    APP_ENV: str = os.getenv("APP_ENV", "development")
+
     OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "qwen3:8b")
     OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
@@ -33,6 +35,17 @@ class Settings:
 
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     CLAUDE_MODEL: str = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
+
+    ENABLE_DEMO_AUTH: bool = _env_bool("ENABLE_DEMO_AUTH", False)
+    DEMO_CUSTOMER_IDS: str = os.getenv("DEMO_CUSTOMER_IDS", "C001,C002")
+
+    @property
+    def demo_auth_enabled(self) -> bool:
+        return self.ENABLE_DEMO_AUTH and self.APP_ENV.strip().lower() not in {"prod", "production"}
+
+    @property
+    def demo_customer_ids(self) -> set[str]:
+        return {item.strip() for item in self.DEMO_CUSTOMER_IDS.split(",") if item.strip()}
 
 
 settings = Settings()
