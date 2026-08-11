@@ -1,3 +1,4 @@
+import os
 from contextlib import AsyncExitStack
 from pathlib import Path
 
@@ -39,6 +40,19 @@ def build_mcp_servers_config() -> dict:
             "transport": "stdio",
             "command": "python3",
             "args": [str(SERVER_PATH)],
+            # The MCP server runs as a fresh subprocess, spawned by
+            # its full file path — it does NOT automatically inherit
+            # uvicorn's --app-dir src trick, so without PYTHONPATH set
+            # explicitly, "from scout..." imports inside server.py fail
+            # with ModuleNotFoundError. Confirmed via a real Docker
+            # deployment crash: the main process starts fine (uvicorn
+            # sets its own path correctly), but the MCP subprocess
+            # can't find the scout package at all, crashing the whole
+            # app on startup since tool_manager.start() awaits it.
+            "env": {
+                **os.environ,
+                "PYTHONPATH": str(SERVER_PATH.parent.parent.parent),
+            },
         },
     }
 
