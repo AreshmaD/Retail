@@ -7,6 +7,7 @@ import {
   getImagePresentation,
   getPromotionPresentation,
 } from "./ProductCard.helpers";
+import { buildInventoryQuickActions } from "./ChatWidget.helpers";
 import ReactMarkdown from "react-markdown";
 import "./ChatWidget.css";
 
@@ -230,6 +231,26 @@ function ChatRefinementPrompt({ products, onPromptClick, disabled }) {
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function ChatQuickActions({ actions, onPromptClick, disabled }) {
+  if (!actions.length) return null;
+
+  return (
+    <div className="chat-widget-quick-actions" aria-label="Suggested next actions">
+      {actions.map((action) => (
+        <button
+          key={action}
+          type="button"
+          className="chat-widget-quick-action"
+          onClick={() => onPromptClick(action)}
+          disabled={disabled}
+        >
+          {action}
+        </button>
+      ))}
     </div>
   );
 }
@@ -505,67 +526,80 @@ export default function ChatWidget() {
           </div>
         )}
 
-        {messages.map((msg, i) => (
-          <div key={i}>
-            <div className={`chat-widget-bubble-msg chat-widget-bubble-msg--${msg.role}`}>
-              {msg.role === "assistant" ? (
-                <ReactMarkdown
-                  components={{
-                    a: (props) => <a {...props} target="_blank" rel="noopener noreferrer" />,
-                    p: (props) => <p style={{ margin: 0 }} {...props} />,
-                  }}
-                >
-                  {msg.content}
-                </ReactMarkdown>
-              ) : (
-                msg.content
+        {messages.map((msg, i) => {
+          const quickActions =
+            msg.role === "assistant"
+              ? buildInventoryQuickActions(msg.content, messages.slice(0, i + 1))
+              : [];
+
+          return (
+            <div key={i}>
+              <div className={`chat-widget-bubble-msg chat-widget-bubble-msg--${msg.role}`}>
+                {msg.role === "assistant" ? (
+                  <ReactMarkdown
+                    components={{
+                      a: (props) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+                      p: (props) => <p style={{ margin: 0 }} {...props} />,
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                ) : (
+                  msg.content
+                )}
+              </div>
+
+              {msg.role === "assistant" && (
+                <div className="chat-widget-feedback" aria-label="Rate this response">
+                  <button
+                    type="button"
+                    className={`chat-widget-feedback-btn ${messageFeedback[i] === "up" ? "chat-widget-feedback-btn--active" : ""}`}
+                    onClick={() => handleFeedback(i, "up")}
+                    aria-label="Helpful response"
+                    aria-pressed={messageFeedback[i] === "up"}
+                  >
+                    <FeedbackIcon direction="up" />
+                  </button>
+                  <button
+                    type="button"
+                    className={`chat-widget-feedback-btn ${messageFeedback[i] === "down" ? "chat-widget-feedback-btn--active" : ""}`}
+                    onClick={() => handleFeedback(i, "down")}
+                    aria-label="Not helpful response"
+                    aria-pressed={messageFeedback[i] === "down"}
+                  >
+                    <FeedbackIcon direction="down" />
+                  </button>
+                </div>
+              )}
+
+              {msg.role === "error" && lastFailedMessage && i === messages.length - 1 && (
+                <button className="chat-widget-retry-btn" onClick={handleRetry} disabled={isLoading}>
+                  Retry
+                </button>
+              )}
+
+              <ChatQuickActions
+                actions={quickActions}
+                onPromptClick={handleStarterClick}
+                disabled={isLoading}
+              />
+
+              {msg.products && msg.products.length > 0 && (
+                <>
+                  <ChatProductRail
+                    products={msg.products}
+                    onInternalProductClick={() => setIsOpen(false)}
+                  />
+                  <ChatRefinementPrompt
+                    products={msg.products}
+                    onPromptClick={handleStarterClick}
+                    disabled={isLoading}
+                  />
+                </>
               )}
             </div>
-
-            {msg.role === "assistant" && (
-              <div className="chat-widget-feedback" aria-label="Rate this response">
-                <button
-                  type="button"
-                  className={`chat-widget-feedback-btn ${messageFeedback[i] === "up" ? "chat-widget-feedback-btn--active" : ""}`}
-                  onClick={() => handleFeedback(i, "up")}
-                  aria-label="Helpful response"
-                  aria-pressed={messageFeedback[i] === "up"}
-                >
-                  <FeedbackIcon direction="up" />
-                </button>
-                <button
-                  type="button"
-                  className={`chat-widget-feedback-btn ${messageFeedback[i] === "down" ? "chat-widget-feedback-btn--active" : ""}`}
-                  onClick={() => handleFeedback(i, "down")}
-                  aria-label="Not helpful response"
-                  aria-pressed={messageFeedback[i] === "down"}
-                >
-                  <FeedbackIcon direction="down" />
-                </button>
-              </div>
-            )}
-
-            {msg.role === "error" && lastFailedMessage && i === messages.length - 1 && (
-              <button className="chat-widget-retry-btn" onClick={handleRetry} disabled={isLoading}>
-                Retry
-              </button>
-            )}
-
-            {msg.products && msg.products.length > 0 && (
-              <>
-                <ChatProductRail
-                  products={msg.products}
-                  onInternalProductClick={() => setIsOpen(false)}
-                />
-                <ChatRefinementPrompt
-                  products={msg.products}
-                  onPromptClick={handleStarterClick}
-                  disabled={isLoading}
-                />
-              </>
-            )}
-          </div>
-        ))}
+          );
+        })}
 
         {isLoading && progressSteps.length > 0 && (
           <div className="chat-widget-progress">

@@ -81,11 +81,18 @@ export async function sendChatFeedback(feedback) {
   return response.json();
 }
 
-export async function addToCartRequest(productId, quantity = 1) {
+export async function addToCartRequest(productId, quantity = 1, options = {}) {
+  const payload = {
+    product_id: productId,
+    quantity,
+  };
+  if (options.size) payload.size = options.size;
+  if (options.color) payload.color = options.color;
+
   const response = await fetch(`${BASE_URL}/cart/add`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ product_id: productId, quantity }),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {

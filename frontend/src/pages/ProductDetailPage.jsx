@@ -4,6 +4,12 @@ import { useCart } from "../context/CartContext";
 import { useSavedItems } from "../context/SavedItemsContext";
 import ProductCard from "../components/ProductCard";
 import { formatCurrency, getPromotionPresentation } from "../components/ProductCard.helpers";
+import {
+  formatVariantLabel,
+  getUniqueVariantValues,
+  getVariantAvailability,
+  isVariantOptionVisuallyUnavailable,
+} from "./ProductDetailPage.helpers";
 import "./ProductDetailPage.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
@@ -36,10 +42,16 @@ const VARIANT_OPTIONS = {
 };
 
 function getInitialVariants(product) {
-  const options = VARIANT_OPTIONS[product.category] || { sizes: [], colors: [] };
+  const stockSizes = getUniqueVariantValues(product.variants, "size");
+  const stockColors = getUniqueVariantValues(product.variants, "color");
+  const fallbackOptions = VARIANT_OPTIONS[product.category] || { sizes: [], colors: [] };
+  const options = {
+    sizes: stockSizes.length ? stockSizes : fallbackOptions.sizes,
+    colors: stockColors.length ? stockColors : fallbackOptions.colors,
+  };
   return {
     size: options.sizes[0] || "",
-    color: options.colors.find((color) => product.tags?.includes(color.toLowerCase())) || options.colors[0] || "",
+    color: options.colors.find((color) => product.tags?.includes(String(color).toLowerCase())) || options.colors[0] || "",
   };
 }
 
@@ -71,6 +83,9 @@ export default function ProductDetailPage() {
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
   const [quantity, setQuantity] = useState(1);
+  const [variantStock, setVariantStock] = useState(null);
+  const [cartError, setCartError] = useState("");
+  const [unavailableContextField, setUnavailableContextField] = useState("size");
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -92,13 +107,65 @@ export default function ProductDetailPage() {
       .finally(() => setLoading(false));
   }, [productId]);
 
+  useEffect(() => {
+    if (!product || !selectedSize || !selectedColor || !(product.variants || []).length) {
+      return;
+    }
+
+    const params = new URLSearchParams({ size: selectedSize, color: selectedColor });
+    let cancelled = false;
+    fetch(`${API_BASE}/products/${product.product_id}/stock?${params.toString()}`)
+      .then((r) => r.json())
+      .then((stockData) => {
+        if (!cancelled) {
+          setVariantStock(stockData);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setVariantStock(null);
+        }
+      })
+
+    return () => {
+      cancelled = true;
+    };
+  }, [product, selectedSize, selectedColor]);
+
   if (loading) return <p>Loading…</p>;
   if (!product) return <p>Product not found. <Link to="/">Go back home</Link></p>;
 
   const saved = isSaved(product);
-  const variantOptions = VARIANT_OPTIONS[product.category] || { sizes: [], colors: [] };
+  const fallbackVariantOptions = VARIANT_OPTIONS[product.category] || { sizes: [], colors: [] };
+  const variantOptions = {
+    sizes: getUniqueVariantValues(product.variants, "size"),
+    colors: getUniqueVariantValues(product.variants, "color"),
+  };
+  if (!variantOptions.sizes.length) variantOptions.sizes = fallbackVariantOptions.sizes;
+  if (!variantOptions.colors.length) variantOptions.colors = fallbackVariantOptions.colors;
+  const stockProduct = variantStock?.product_id === product.product_id
+    && variantStock?.requested_size === selectedSize
+    && String(variantStock?.requested_color || "").toLowerCase() === String(selectedColor || "").toLowerCase()
+    ? { ...product, variants: variantStock.variants || [] }
+    : product;
+  const availability = getVariantAvailability(stockProduct, selectedSize, selectedColor, quantity);
+  const usesVariantInventory = Boolean((product.variants || []).length);
+  const canAddToCart = availability.canAddToCart;
   const promotionPresentation = getPromotionPresentation(product);
   const detailBullets = getDetailBullets(product);
+
+  async function handleAddToCart() {
+    setCartError("");
+    try {
+      await addToCart(
+        product,
+        quantity,
+        usesVariantInventory ? { size: selectedSize, color: selectedColor } : {}
+      );
+    } catch (error) {
+      setCartError(error.message || "Unable to add this item right now.");
+    }
+  }
 
   return (
     <div className="product-detail-page">
@@ -159,19 +226,37 @@ export default function ProductDetailPage() {
                   <div className="product-detail-variant-group">
                     <div className="product-detail-variant-label">
                       <span>Size</span>
-                      <span>{selectedSize}</span>
+                      <span>{formatVariantLabel(selectedSize)}</span>
                     </div>
                     <div className="product-detail-variant-options">
                       {variantOptions.sizes.map((size) => (
-                        <button
-                          key={size}
-                          type="button"
-                          className={`product-detail-variant-chip ${size === selectedSize ? "product-detail-variant-chip--selected" : ""}`}
-                          onClick={() => setSelectedSize(size)}
-                          aria-pressed={size === selectedSize}
-                        >
-                          {size}
-                        </button>
+                        (() => {
+                          const unavailable = isVariantOptionVisuallyUnavailable(
+                            product,
+                            "size",
+                            size,
+                            selectedSize,
+                            selectedColor,
+                            unavailableContextField
+                          );
+                          return (
+                            <button
+                              key={size}
+                              type="button"
+                              className={`product-detail-variant-chip ${size === selectedSize ? "product-detail-variant-chip--selected" : ""} ${unavailable ? "product-detail-variant-chip--unavailable" : ""}`}
+                              onClick={() => {
+                                setSelectedSize(size);
+                                setUnavailableContextField("size");
+                                setCartError("");
+                              }}
+                              aria-pressed={size === selectedSize}
+                              aria-disabled={unavailable}
+                            >
+                              <span>{formatVariantLabel(size)}</span>
+                              {unavailable && <span className="sr-only"> — out of stock</span>}
+                            </button>
+                          );
+                        })()
                       ))}
                     </div>
                   </div>
@@ -181,19 +266,37 @@ export default function ProductDetailPage() {
                   <div className="product-detail-variant-group">
                     <div className="product-detail-variant-label">
                       <span>Color</span>
-                      <span>{selectedColor}</span>
+                      <span>{formatVariantLabel(selectedColor)}</span>
                     </div>
                     <div className="product-detail-variant-options">
                       {variantOptions.colors.map((color) => (
-                        <button
-                          key={color}
-                          type="button"
-                          className={`product-detail-variant-chip ${color === selectedColor ? "product-detail-variant-chip--selected" : ""}`}
-                          onClick={() => setSelectedColor(color)}
-                          aria-pressed={color === selectedColor}
-                        >
-                          {color}
-                        </button>
+                        (() => {
+                          const unavailable = isVariantOptionVisuallyUnavailable(
+                            product,
+                            "color",
+                            color,
+                            selectedSize,
+                            selectedColor,
+                            unavailableContextField
+                          );
+                          return (
+                            <button
+                              key={color}
+                              type="button"
+                              className={`product-detail-variant-chip ${color === selectedColor ? "product-detail-variant-chip--selected" : ""} ${unavailable ? "product-detail-variant-chip--unavailable" : ""}`}
+                              onClick={() => {
+                                setSelectedColor(color);
+                                setUnavailableContextField("color");
+                                setCartError("");
+                              }}
+                              aria-pressed={color === selectedColor}
+                              aria-disabled={unavailable}
+                            >
+                              <span>{formatVariantLabel(color)}</span>
+                              {unavailable && <span className="sr-only"> — out of stock</span>}
+                            </button>
+                          );
+                        })()
                       ))}
                     </div>
                   </div>
@@ -214,7 +317,8 @@ export default function ProductDetailPage() {
                 <span>{quantity}</span>
                 <button
                   type="button"
-                  onClick={() => setQuantity((value) => Math.min(9, value + 1))}
+                  onClick={() => setQuantity((value) => Math.min(availability.quantity || 9, value + 1))}
+                  disabled={usesVariantInventory && !availability.inStock}
                   aria-label="Increase quantity"
                 >
                   +
@@ -223,8 +327,12 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="product-detail-actions">
-              <button className="product-detail-add-btn" onClick={() => addToCart(product, quantity)}>
-                Add to cart
+              <button
+                className="product-detail-add-btn"
+                onClick={handleAddToCart}
+                disabled={!canAddToCart}
+              >
+                {availability.inStock ? "Add to cart" : "Out of stock"}
               </button>
               <button
                 className={`product-detail-save-btn ${saved ? "product-detail-save-btn--active" : ""}`}
@@ -233,6 +341,11 @@ export default function ProductDetailPage() {
                 {saved ? "♥ Saved" : "♡ Save"}
               </button>
             </div>
+
+            <p className={`product-detail-stock-status ${availability.inStock ? "product-detail-stock-status--in" : "product-detail-stock-status--out"}`}>
+              {availability.message}
+            </p>
+            {cartError && <p className="product-detail-cart-error">{cartError}</p>}
 
             <div className="product-detail-trust">
               <span>Free shipping over $75</span>

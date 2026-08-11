@@ -8,7 +8,17 @@ function loadInitialState() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      return {
+        items: (parsed.items || []).map((item) => ({
+          ...item,
+          cart_key: item.cart_key || [
+            item.product_id,
+            item.color || "",
+            item.size || "",
+          ].join(":"),
+        })),
+      };
     }
   } catch (e) {
     console.warn("Failed to load cart from localStorage:", e);
@@ -19,11 +29,11 @@ function loadInitialState() {
 function cartReducer(state, action) {
   switch (action.type) {
     case "ADD_ITEM": {
-      const existing = state.items.find((i) => i.product_id === action.item.product_id);
+      const existing = state.items.find((i) => i.cart_key === action.item.cart_key);
       if (existing) {
         return {
           items: state.items.map((i) =>
-            i.product_id === action.item.product_id
+            i.cart_key === action.item.cart_key
               ? { ...i, quantity: i.quantity + action.item.quantity }
               : i
           ),
@@ -35,13 +45,13 @@ function cartReducer(state, action) {
     }
     case "REMOVE_ITEM":
       return {
-        items: state.items.filter((i) => i.product_id !== action.productId),
+        items: state.items.filter((i) => i.cart_key !== action.cartKey),
       };
     case "UPDATE_QUANTITY":
       return {
         items: state.items
           .map((i) =>
-            i.product_id === action.productId
+            i.cart_key === action.cartKey
               ? { ...i, quantity: Math.max(0, action.quantity) }
               : i
           )
@@ -75,10 +85,15 @@ export function CartProvider({ children }) {
     }
   }, [state]);
 
-  const addToCart = async (product, quantity = 1) => {
+  const addToCart = async (product, quantity = 1, options = {}) => {
     const productId = product.product_id;
+    const pendingKey = [
+      productId,
+      options.color || "",
+      options.size || "",
+    ].join(":");
 
-    if (pendingProductIds.current.has(productId)) {
+    if (pendingProductIds.current.has(pendingKey)) {
       return;
     }
 
@@ -86,15 +101,20 @@ export function CartProvider({ children }) {
     // await — this is reliably the button the user just clicked.
     triggerElementRef.current = document.activeElement;
 
-    pendingProductIds.current.add(productId);
+    pendingProductIds.current.add(pendingKey);
     try {
-      const result = await addToCartRequest(productId, quantity);
+      const result = await addToCartRequest(productId, quantity, options);
 
       if (!result.success) {
         throw new Error(result.error || "Failed to add item");
       }
 
       const item = {
+        cart_key: [
+          result.product_id,
+          result.color || "",
+          result.size || "",
+        ].join(":"),
         product_id: result.product_id,
         name: result.name,
         brand: product.brand,
@@ -102,21 +122,21 @@ export function CartProvider({ children }) {
         price: result.unit_price,
         promotion: result.promotion,
         quantity: result.quantity,
-        // size is intentionally omitted — no variant-selection UI exists
-        // yet, so we never invent one here.
+        size: result.size,
+        color: result.color,
       };
 
       dispatch({ type: "ADD_ITEM", item });
       setLastAdded(item);
       setNotifyId((n) => n + 1);
     } finally {
-      pendingProductIds.current.delete(productId);
+      pendingProductIds.current.delete(pendingKey);
     }
   };
 
-  const removeFromCart = (productId) => dispatch({ type: "REMOVE_ITEM", productId });
+  const removeFromCart = (cartKey) => dispatch({ type: "REMOVE_ITEM", cartKey });
   const updateQuantity = (productId, quantity) =>
-    dispatch({ type: "UPDATE_QUANTITY", productId, quantity });
+    dispatch({ type: "UPDATE_QUANTITY", cartKey: productId, quantity });
   const clearCart = () => dispatch({ type: "CLEAR_CART" });
 
   const itemCount = state.items.reduce((sum, i) => sum + i.quantity, 0);

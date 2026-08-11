@@ -42,7 +42,12 @@ export default function CartPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: items.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
+          items: items.map((i) => ({
+            product_id: i.product_id,
+            quantity: i.quantity,
+            size: i.size,
+            color: i.color,
+          })),
         }),
       });
       const data = await response.json();
@@ -139,20 +144,24 @@ export default function CartPage() {
         <div className="cart-items-panel">
           <div className="cart-items">
             {items.map((item) => (
-              <div key={item.product_id} className="cart-item">
+              <div key={item.cart_key || item.product_id} className="cart-item">
                 <img className="cart-item-image" src={resolveImageUrl(item.image_url)} alt={item.name} />
 
                 <div className="cart-item-details">
                   <p className="cart-item-brand">{item.brand}</p>
                   <p className="cart-item-name">{item.name}</p>
                   <p className="cart-item-price">${item.price.toFixed(2)}</p>
-                  <p className="cart-item-note">Size and color confirmed during checkout</p>
+                  <p className="cart-item-note">
+                    {item.size || item.color
+                      ? [item.color, item.size ? `Size ${item.size}` : ""].filter(Boolean).join(" · ")
+                      : "Size and color confirmed during checkout"}
+                  </p>
                 </div>
 
                 <div className="cart-item-qty" aria-label={`Quantity for ${item.name}`}>
                   <button
                     className="cart-qty-btn"
-                    onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
+                    onClick={() => updateQuantity(item.cart_key || item.product_id, item.quantity - 1)}
                     aria-label={`Decrease quantity for ${item.name}`}
                   >
                     −
@@ -160,7 +169,7 @@ export default function CartPage() {
                   <span className="cart-qty-value">{item.quantity}</span>
                   <button
                     className="cart-qty-btn"
-                    onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
+                    onClick={() => updateQuantity(item.cart_key || item.product_id, item.quantity + 1)}
                     aria-label={`Increase quantity for ${item.name}`}
                   >
                     +
@@ -173,7 +182,7 @@ export default function CartPage() {
 
                 <button
                   className="cart-item-remove"
-                  onClick={() => removeFromCart(item.product_id)}
+                  onClick={() => removeFromCart(item.cart_key || item.product_id)}
                   aria-label={`Remove ${item.name}`}
                 >
                   ✕
