@@ -69,7 +69,9 @@ Recommended portfolio captures live in [`docs/screenshots/README.md`](docs/scree
 backend/
   src/scout/
     api/                 FastAPI routes: chat, products, checkout, affiliate, cart add validation
-    agents/              Supervisor, specialists, evidence, claims, verification, rendering
+    agents/              Supervisor entry point + specialists, evidence, claims,
+                         verification, rendering, and orchestration submodules
+                         (see docs/architecture.md for the full breakdown)
     mcp_server/          Local Scout MCP registry: 11 approved read tools
     services/            Deterministic business logic used by REST and tools
     repositories/        Database access layer
