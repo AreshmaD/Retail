@@ -38,7 +38,7 @@ Specialist tool allowlists themselves:
 
 | Specialist | Current tools | Boundary |
 |---|---|---|
-| `recommend_agent` | `recommend_products`, `search`, `alternatives` | Product search, recommendations, similar products, promotions, ranking |
+| `recommend_agent` | `recommend_products`, `search`, `stock`, `alternatives` | Product search, recommendations, similar products, promotions, ranking |
 | `inventory_agent` | `search`, `stock`, `stores`, `fulfillment_options` | Inventory, store, fulfillment reads |
 | `order_agent` | `orders`, `order_history`, `return_eligibility` | Read-only order information |
 | `external_offer_agent` | `search_external_offers` | Third-party offer lookup only |

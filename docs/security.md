@@ -34,9 +34,29 @@ The local Scout MCP registry exposes 11 approved read tools:
 - `render_verified_response()` rebuilds factual replies and product cards from approved claims.
 - One bounded targeted correction can run only when needed and eligible; its raw output is passed through the complete verification pipeline before customer output.
 
+## Order Authorization
+
+`orders()` fails closed without a trusted, authenticated customer
+context — it returns `authorized: false` with a safe, generic denial
+message rather than any real order data. A dedicated `ACCESS_DENIED`
+claim type carries this message through the same evidence/claims/
+verification/rendering pipeline as any other verified fact, so the
+customer sees a clear "please sign in" response instead of the tool
+call silently failing into a generic fallback. Non-owners cannot
+access another customer's order — confirmed and tested directly.
+
+A local-only demo sign-in (`ENABLE_DEMO_AUTH`, disabled automatically
+when `APP_ENV=production`) supports a small set of seeded demo
+customers, so authenticated order flows can actually be tested without
+touching production-grade auth infrastructure.
+
 ## Known Non-Production Limits
 
-- No authentication or user authorization.
-- Synthetic order IDs can be queried without proving customer identity.
-- No rate limiting, audit storage, abuse detection, or human review workflow.
-- Stripe checkout is test-mode/demo code and should not be treated as production payment infrastructure without a full security review.
+- Demo authentication is local-only and uses a small, seeded set of
+  customer IDs — it is not a real identity/session system and should
+  not be treated as production-grade auth without a full security
+  review.
+- No rate limiting, audit storage, abuse detection, or human review
+  workflow.
+- Stripe checkout is test-mode/demo code and should not be treated as
+  production payment infrastructure without a full security review.
