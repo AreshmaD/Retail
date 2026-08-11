@@ -263,6 +263,10 @@ def _render_reply(
     rendered_products: list[dict],
     customer_message: str,
 ) -> str:
+    access_denied_sentences = _access_denied_sentences(approved_claims)
+    if access_denied_sentences:
+        return " ".join(access_denied_sentences)
+
     inventory_sentences = _inventory_sentences(approved_claims, customer_message)
     if _is_inventory_request(customer_message) and inventory_sentences:
         request_specific = [
@@ -650,6 +654,18 @@ def _parse_inventory_subject(subject_id: str) -> dict[str, str]:
             parsed[key] = parts[index + 1]
         return parsed
     return {"product_id": subject_id}
+
+
+def _access_denied_sentences(claims: list[ProposedClaim]) -> list[str]:
+    messages = [
+        str(claim.value)
+        for claim in claims
+        if claim.claim_type == ClaimType.ACCESS_DENIED.value
+        and claim.field == "message"
+        and isinstance(claim.value, str)
+        and claim.value.strip()
+    ]
+    return _unique(messages)
 
 
 def _order_sentences(claims: list[ProposedClaim]) -> list[str]:

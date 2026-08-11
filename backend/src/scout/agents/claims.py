@@ -31,6 +31,7 @@ class ClaimType(StrEnum):
     EXTERNAL_OFFER_USE_CASE = "external_offer_use_case"
     EXTERNAL_OFFER_ATTRIBUTE = "external_offer_attribute"
     EXTERNAL_OFFER_AVAILABILITY = "external_offer_availability"
+    ACCESS_DENIED = "access_denied"
 
 
 CANONICAL_AGENT_NAMES = {
@@ -280,20 +281,19 @@ def _add_evidence_claims(builder: _ClaimBuilder, entry: EvidenceEntry) -> None:
 
         if facts.get("order_id") and facts.get("status") is not None:
             builder.add(claim_type=ClaimType.ORDER_STATUS, subject_id=facts["order_id"], field="status", value=facts["status"], evidence_ids=evidence_ids, source_agent=agent)
-        elif facts.get("order_id") and facts.get("found") is False and facts.get("message") is not None:
-            # Genuine authorization-denial case (e.g. orders() returning
+        elif facts.get("found") is False and facts.get("message") is not None:
+            # Genuine access-denial case (e.g. orders() returning
             # found=False, authorized=False, with a safe, tool-provided
             # message like "Sign in to view order details.") — this is
-            # NOT the customer's actual order data, it's a real,
-            # deliberate denial message the tool itself already decided
-            # is safe to show. Uses ORDER_STATUS (not POLICY_STATEMENT,
-            # which is domain-restricted to policy_agent only — see
-            # DOMAIN_AGENTS in verification.py) with the tool's own
-            # message as the "status" value, since order_agent is
-            # already an authorized source for ORDER_STATUS claims.
-            # Does NOT reveal any order data - only the tool's own
-            # pre-approved denial message.
-            builder.add(claim_type=ClaimType.ORDER_STATUS, subject_id=facts["order_id"], field="status", value=facts["message"], evidence_ids=evidence_ids, source_agent=agent)
+            # NOT the customer's real data, it's a deliberate denial
+            # message the tool itself already decided is safe to show.
+            # Dedicated ACCESS_DENIED claim type (not ORDER_STATUS or
+            # POLICY_STATEMENT, both of which had real, distinct
+            # matching-logic mismatches when reused for this shape
+            # during earlier debugging) — verified via exact-string
+            # match only, domain-authorized per specialist, and never
+            # reveals any of the customer's actual data.
+            builder.add(claim_type=ClaimType.ACCESS_DENIED, subject_id=subject_id or facts.get("order_id"), field="message", value=facts["message"], evidence_ids=evidence_ids, source_agent=agent)
         if facts.get("tracking_number") is not None:
             builder.add(claim_type=ClaimType.ORDER_TRACKING, subject_id=subject_id, field="tracking_number", value=facts["tracking_number"], evidence_ids=evidence_ids, source_agent=agent)
         if facts.get("payment_status") is not None:
