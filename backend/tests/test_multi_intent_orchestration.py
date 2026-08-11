@@ -6,6 +6,8 @@ from scout.agents.diagnostics import SAFE_TIMEOUT_REPLY
 from scout.agents.evidence import record_tool_call
 from scout.agents.intent_splitter import split_intents_with_metadata
 from scout.api.chat import ChatRequest, ChatResponse
+from scout.db.session import SessionLocal
+from scout.services.order_service import check_return_eligibility_for_customer, get_order_for_customer
 
 
 class App:
@@ -126,6 +128,29 @@ def _run_with_fake_tools(monkeypatch, message, conversation_context=None):
     return SimpleNamespace(reply=reply, history=history, products=products, calls=calls, graph_markers=graph_markers)
 
 
+def _run_with_tool_overrides(monkeypatch, message, overrides):
+    calls = []
+    graph_markers = []
+
+    async def fake_tool(tool_name, args, *, agent_name):
+        calls.append((agent_name, tool_name, dict(args)))
+        result = overrides.get(tool_name, _tool_result)(tool_name, args)
+        record_tool_call(
+            tool_name=tool_name,
+            validated_args=args,
+            success=True,
+            result=result,
+            agent_name=agent_name,
+        )
+        return result
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+    monkeypatch.setattr(supervisor, "_record_multi_intent_supervisor_path", lambda plan: graph_markers.append([s.intent for s in plan.subgoals]))
+    reply, history, products = asyncio.run(supervisor.ask(App(), [], message))
+    return SimpleNamespace(reply=reply, history=history, products=products, calls=calls, graph_markers=graph_markers)
+
+
 def test_mi_01_recommendation_transfers_product_ids_to_store_inventory(monkeypatch):
     result = _run_with_fake_tools(
         monkeypatch,
@@ -204,6 +229,159 @@ def test_mi_04_order_status_and_return_eligibility_are_read_only(monkeypatch):
     assert [call[1] for call in result.calls] == ["orders", "return_eligibility"]
     assert result.reply == "Order O1001 has shipped and is currently eligible for return."
     assert not any(call[1] in {"refund", "cancel", "checkout", "payment"} for call in result.calls)
+
+
+def test_order_status_question_uses_order_agent_only(monkeypatch):
+    result = _run_with_fake_tools(monkeypatch, "Where is O1001?")
+
+    assert result.graph_markers == []
+    assert [call[0] for call in result.calls] == ["order_agent"]
+    assert [call[1] for call in result.calls] == ["orders"]
+    assert "Order O1001 has shipped" in result.reply
+
+
+def test_simple_return_policy_question_uses_policy_agent_only(monkeypatch):
+    app = App()
+    split = split_intents_with_metadata(object(), "What is your return policy?")
+
+    assert split.execution_plan is None
+    assert split.structured_intent.request_type == "policy_question"
+    assert supervisor._direct_route_agent(app, split.structured_intent, split.sub_intents) == "policy_agent"
+
+
+def test_order_specific_return_reason_uses_order_then_policy(monkeypatch):
+    result = _run_with_fake_tools(monkeypatch, "Can I return order O1001, and why?")
+
+    assert result.graph_markers == [["order_status", "return_eligibility", "policy_question"]]
+    assert [call[0] for call in result.calls] == ["order_agent", "order_agent", "policy_agent"]
+    assert [call[1] for call in result.calls] == ["orders", "return_eligibility", "retrieve_policy_chunks"]
+    assert result.calls[2][2]["query"] == "Explain the Scout return policy rule for order return eligibility."
+    assert "Order O1001 has shipped" in result.reply
+    assert "eligible for return" in result.reply
+    assert "Opened or worn items usually aren’t eligible" in result.reply
+
+
+def test_unauthorized_order_stops_before_policy_explanation(monkeypatch):
+    def unauthorized_order(tool_name, args):
+        return {
+            "authorized": False,
+            "error_code": "order_access_denied",
+            "order_id": args["order_id"],
+        }
+
+    result = _run_with_tool_overrides(
+        monkeypatch,
+        "Can I return order O1001, and why?",
+        {"orders": unauthorized_order},
+    )
+
+    assert result.graph_markers == [["order_status", "return_eligibility", "policy_question"]]
+    assert [call[1] for call in result.calls] == ["orders"]
+    assert "shipped" not in result.reply.lower()
+    assert "eligible for return" not in result.reply.lower()
+    assert "Opened or worn items" not in result.reply
+
+
+def test_missing_policy_evidence_does_not_invent_order_policy_reason(monkeypatch):
+    def empty_policy(tool_name, args):
+        return []
+
+    result = _run_with_tool_overrides(
+        monkeypatch,
+        "Can I return order O1001, and why?",
+        {"retrieve_policy_chunks": empty_policy},
+    )
+
+    assert [call[1] for call in result.calls] == ["orders", "return_eligibility", "retrieve_policy_chunks"]
+    assert "Order O1001 has shipped" in result.reply
+    assert "eligible for return" in result.reply
+    assert "Opened or worn items" not in result.reply
+    assert "30 days" not in result.reply
+
+
+def test_order_specific_worn_item_policy_uses_real_o1001_item_and_targeted_policy(monkeypatch):
+    policy_queries = []
+
+    def real_owned_order(tool_name, args):
+        session = SessionLocal()
+        try:
+            if tool_name == "orders":
+                return get_order_for_customer(session, args["order_id"], authenticated_customer_id="C001")
+            if tool_name == "return_eligibility":
+                return check_return_eligibility_for_customer(session, args["order_id"], authenticated_customer_id="C001")
+        finally:
+            session.close()
+        raise AssertionError(f"unexpected order tool {tool_name}")
+
+    def policy_result(tool_name, args):
+        query = args["query"]
+        policy_queries.append(query)
+        if "opened used worn" in query:
+            return [
+                {
+                    "statement": (
+                        "Items may be returned within 30 days of delivery if unworn, unwashed, "
+                        "and original tags are attached. Opened or worn items are not eligible "
+                        "for return unless defective."
+                    ),
+                    "policy_name": "Returns",
+                    "source_document": "returns.md",
+                    "source_section": "returns",
+                }
+            ]
+        return [
+            {
+                "statement": "Items may be returned within 30 days of delivery.",
+                "policy_name": "Returns",
+                "source_document": "returns.md",
+                "source_section": "returns",
+            }
+        ]
+
+    result = _run_with_tool_overrides(
+        monkeypatch,
+        "Can I return order O1001 if the Running Shoes are worn, and why?",
+        {
+            "orders": real_owned_order,
+            "return_eligibility": real_owned_order,
+            "retrieve_policy_chunks": policy_result,
+        },
+    )
+
+    assert result.graph_markers == [["order_status", "return_eligibility", "policy_question"]]
+    assert [call[1] for call in result.calls] == [
+        "orders",
+        "return_eligibility",
+        "retrieve_policy_chunks",
+        "retrieve_policy_chunks",
+    ]
+    assert result.calls[0][2] == {"order_id": "O1001"}
+    assert result.calls[1][2] == {"order_id": "O1001"}
+    assert len(policy_queries) == 2
+    assert policy_queries[0] == "Explain the Scout return policy rule for order return eligibility."
+    assert policy_queries[1] == "Scout return policy opened used worn items defective original tags"
+    assert all("Running Shoes" not in query and "P005" not in query and "O1001" not in query for query in policy_queries)
+    assert "Order O1001 has shipped" in result.reply
+    assert "eligible for return" in result.reply
+    assert "Opened or worn items usually aren’t eligible" in result.reply
+
+
+def test_o1001_seeded_order_item_is_running_shoes():
+    session = SessionLocal()
+    try:
+        order = get_order_for_customer(session, "O1001", authenticated_customer_id="C001")
+    finally:
+        session.close()
+
+    assert order["authorized"] is True
+    assert order["items"] == [
+        {
+            "product_id": "P005",
+            "name": "Running Shoes",
+            "quantity": 1,
+            "price_at_purchase": 64.99,
+        }
+    ]
 
 
 def test_mi_05_external_fallback_after_internal_insufficiency(monkeypatch):

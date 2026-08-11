@@ -759,11 +759,15 @@ def test_actual_wrapped_stores_tool_retains_structured_store_fields(monkeypatch)
             clear_evidence_context()
             start_evidence_context("sub_actual_stores")
             reset_guard()
-            wrapped = wrap_tool_with_guard(stores_tool, agent_name="inventory_agent")
-            await wrapped.coroutine(product_id=["P001"], store_name="Maple Grove")
-            entries = get_evidence_entries()
-            records = get_tool_call_records()
-            clear_evidence_context()
+            set_inventory_argument_constraints({"size": "S", "color": "black"})
+            try:
+                wrapped = wrap_tool_with_guard(stores_tool, agent_name="inventory_agent")
+                await wrapped.coroutine(product_id=["P001"], store_name="Maple Grove")
+                entries = get_evidence_entries()
+                records = get_tool_call_records()
+                clear_evidence_context()
+            finally:
+                clear_inventory_argument_constraints()
             return records, entries
         finally:
             await manager.stop()
@@ -772,12 +776,73 @@ def test_actual_wrapped_stores_tool_retains_structured_store_fields(monkeypatch)
     facts = entries[0].normalized_facts
 
     assert records[0].original_args == {"product_id": ["P001"], "store_name": "Maple Grove"}
-    assert records[0].validated_args == {"product_id": "P001", "store_name": "Maple Grove"}
+    assert records[0].validated_args == {"product_id": "P001", "store_name": "Maple Grove", "size": "S", "color": "black"}
     assert facts["stores"][0]["store_id"] == "S01"
     assert facts["stores"][0]["store_name"] == "Maple Grove"
     assert facts["stores"][0]["quantity"] == 2
     assert facts["stores"][0]["in_stock"] is True
+    assert facts["stores"][0]["size"] == "S"
+    assert facts["stores"][0]["color"] == "black"
     assert "pickup_available" not in facts["stores"][0]
+
+
+def test_stores_evidence_records_exact_unavailable_variant_without_store_rows():
+    clear_evidence_context()
+    start_evidence_context("sub_store_variant_unavailable")
+    record_tool_call(
+        tool_name="stores",
+        validated_args={"product_id": "P001", "size": "M", "color": "black"},
+        success=True,
+        result={
+            "product_id": "P001",
+            "found": True,
+            "requested_size": "M",
+            "requested_color": "black",
+            "variant_available": False,
+            "stores": [],
+        },
+        agent_name="inventory_agent",
+    )
+    entries = get_evidence_entries()
+    clear_evidence_context()
+
+    assert entries[0].normalized_facts["product_id"] == "P001"
+    assert entries[0].normalized_facts["size"] == "M"
+    assert entries[0].normalized_facts["color"] == "black"
+    assert entries[0].normalized_facts["quantity"] == 0
+    assert entries[0].normalized_facts["in_stock"] is False
+
+
+def test_fulfillment_evidence_records_exact_unavailable_delivery_variant():
+    clear_evidence_context()
+    start_evidence_context("sub_delivery_variant_unavailable")
+    record_tool_call(
+        tool_name="fulfillment_options",
+        validated_args={"product_id": "P001", "size": "M", "color": "black"},
+        success=True,
+        result={
+            "product_id": "P001",
+            "found": True,
+            "requested_size": "M",
+            "requested_color": "black",
+            "delivery": {
+                "available": False,
+                "quantity": 0,
+                "size": "M",
+                "color": "black",
+            },
+        },
+        agent_name="inventory_agent",
+    )
+    entries = get_evidence_entries()
+    clear_evidence_context()
+
+    assert entries[0].validated_args == {"product_id": "P001", "size": "M", "color": "black"}
+    assert entries[0].normalized_facts["product_id"] == "P001"
+    assert entries[0].normalized_facts["size"] == "M"
+    assert entries[0].normalized_facts["color"] == "black"
+    assert entries[0].normalized_facts["delivery_available"] is False
+    assert entries[0].normalized_facts["quantity"] == 0
 
 
 def test_sensitive_args_are_redacted_and_arbitrary_objects_are_omitted():

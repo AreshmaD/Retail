@@ -82,6 +82,7 @@ def test_verified_selected_product_becomes_active_context(monkeypatch):
     assert context["active_selected_products"] == [{"product_id": "P001", "name": "Black Midi Dress", "source": "internal", "price": 79.99}]
     assert context["active_product_id"] == "P001"
     assert context["active_product_name"] == "Black Midi Dress"
+    assert context["requested_budget_max"] == 80
 
 
 def test_followup_available_medium_resolves_active_product_and_bypasses_supervisor(monkeypatch):
@@ -131,8 +132,610 @@ def test_resolved_followup_pickup_preserves_product_size_and_store(monkeypatch):
         supervisor.ask(app, [], "Can I pick it up at Maple Grove?", conversation_context=context)
     )
 
-    assert captured == {"tool_name": "stores", "args": {"product_id": "P001", "store_name": "Maple Grove"}, "agent_name": "inventory_agent"}
+    assert captured == {"tool_name": "stores", "args": {"product_id": "P001", "store_name": "Maple Grove", "size": "M"}, "agent_name": "inventory_agent"}
     assert context["requested_store"] == "Maple Grove"
+
+
+def test_nearby_store_followup_without_location_asks_for_location(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress"}],
+        "requested_size": "M",
+        "requested_color": "black",
+    }
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    reply, _history, products = asyncio.run(
+        supervisor.ask(
+            app,
+            [],
+            "Check nearby stores for Black Midi Dress in black, size M",
+            conversation_context=context,
+        )
+    )
+
+    assert reply == "Which store or ZIP code should I use to check nearby availability?"
+    assert products == []
+    assert app.graph_calls == 0
+    assert app.scout_specialists["inventory_agent"].calls == 0
+
+
+def test_named_store_followup_preserves_exact_variant(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress"}],
+        "requested_size": "M",
+        "requested_color": "black",
+    }
+    captured = {}
+
+    async def fake_tool(tool_name, args, *, agent_name):
+        captured.update(tool_name=tool_name, args=args, agent_name=agent_name)
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+    monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Store verified."))
+
+    asyncio.run(
+        supervisor.ask(
+            app,
+            [],
+            "Check at Maple Grove for Black Midi Dress in black, size M",
+            conversation_context=context,
+        )
+    )
+
+    assert captured == {
+        "tool_name": "stores",
+        "args": {"product_id": "P001", "store_name": "Maple Grove", "size": "M", "color": "black"},
+        "agent_name": "inventory_agent",
+    }
+
+
+def test_online_delivery_followup_preserves_exact_variant(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress"}],
+        "requested_size": "M",
+        "requested_color": "black",
+    }
+    captured = {}
+
+    async def fake_tool(tool_name, args, *, agent_name):
+        captured.update(tool_name=tool_name, args=args, agent_name=agent_name)
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+    monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Delivery verified."))
+
+    asyncio.run(
+        supervisor.ask(
+            app,
+            [],
+            "Check online or delivery availability for Black Midi Dress in black, size M",
+            conversation_context=context,
+        )
+    )
+
+    assert captured == {
+        "tool_name": "fulfillment_options",
+        "args": {"product_id": "P001", "size": "M", "color": "black"},
+        "agent_name": "inventory_agent",
+    }
+
+
+def test_can_it_be_delivered_routes_to_delivery_check(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_category": "dresses",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+        "requested_size": "M",
+        "requested_color": "black",
+        "requested_budget_max": 80,
+    }
+    captured = {}
+
+    async def fake_tool(tool_name, args, *, agent_name):
+        captured.update(tool_name=tool_name, args=args, agent_name=agent_name)
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+    monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Delivery verified."))
+
+    asyncio.run(supervisor.ask(app, [], "Can it be delivered?", conversation_context=context))
+
+    assert captured == {
+        "tool_name": "fulfillment_options",
+        "args": {"product_id": "P001", "size": "M", "color": "black"},
+        "agent_name": "inventory_agent",
+    }
+    assert app.graph_calls == 0
+    assert app.scout_specialists["inventory_agent"].calls == 0
+
+
+def test_delivery_recovery_paraphrases_route_to_delivery_only(monkeypatch):
+    for message in ("Could you ship it to me?", "Can you send it to me?"):
+        app = App()
+        context = {
+            "active_product_id": "P001",
+            "active_product_name": "Black Midi Dress",
+            "active_category": "dresses",
+            "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+            "requested_size": "M",
+            "requested_color": "black",
+            "requested_budget_max": 80,
+        }
+        captured = {}
+
+        async def fake_tool(tool_name, args, *, agent_name):
+            captured.update(tool_name=tool_name, args=args, agent_name=agent_name)
+
+        monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+        monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+        monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Delivery verified."))
+
+        asyncio.run(supervisor.ask(app, [], message, conversation_context=context))
+
+        assert captured == {
+            "tool_name": "fulfillment_options",
+            "args": {"product_id": "P001", "size": "M", "color": "black"},
+            "agent_name": "inventory_agent",
+        }
+        assert app.graph_calls == 0
+        assert app.scout_specialists["inventory_agent"].calls == 0
+
+
+def test_today_recovery_without_location_asks_for_location(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_category": "dresses",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+        "requested_size": "M",
+        "requested_color": "black",
+        "requested_budget_max": 80,
+    }
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    reply, _history, products = asyncio.run(
+        supervisor.ask(app, [], "I need it today", conversation_context=context)
+    )
+
+    assert reply == "Which store or ZIP code should I use to check nearby availability?"
+    assert products == []
+    assert app.graph_calls == 0
+    assert all(agent.calls == 0 for agent in app.scout_specialists.values())
+
+
+def test_urgency_paraphrase_without_location_asks_for_location(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_category": "dresses",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+        "requested_size": "M",
+        "requested_color": "black",
+        "requested_budget_max": 80,
+    }
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    reply, _history, products = asyncio.run(
+        supervisor.ask(app, [], "I need this before tonight", conversation_context=context)
+    )
+
+    assert reply == "Which store or ZIP code should I use to check nearby availability?"
+    assert products == []
+    assert app.graph_calls == 0
+    assert all(agent.calls == 0 for agent in app.scout_specialists.values())
+
+
+def test_today_recovery_with_store_preserves_exact_variant(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_category": "dresses",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+        "requested_size": "M",
+        "requested_color": "black",
+        "requested_store": "Maple Grove",
+        "requested_budget_max": 80,
+    }
+    calls = []
+
+    async def fake_tool(tool_name, args, *, agent_name):
+        calls.append({"tool_name": tool_name, "args": args, "agent_name": agent_name})
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+    monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Store verified."))
+
+    asyncio.run(supervisor.ask(app, [], "I need it today", conversation_context=context))
+
+    assert calls == [
+        {"tool_name": "stock", "args": {"product_id": "P001", "size": "M", "color": "black"}, "agent_name": "inventory_agent"},
+        {
+            "tool_name": "stores",
+            "args": {"product_id": "P001", "store_name": "Maple Grove", "size": "M", "color": "black"},
+            "agent_name": "inventory_agent",
+        },
+    ]
+    assert app.graph_calls == 0
+    assert app.scout_specialists["inventory_agent"].calls == 0
+
+
+def test_no_drive_recovery_chooses_delivery_not_nearby(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_category": "dresses",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+        "requested_size": "M",
+        "requested_color": "black",
+        "requested_store": "Maple Grove",
+        "requested_budget_max": 80,
+    }
+    captured = {}
+
+    async def fake_tool(tool_name, args, *, agent_name):
+        captured.update(tool_name=tool_name, args=args, agent_name=agent_name)
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+    monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Delivery verified."))
+
+    asyncio.run(supervisor.ask(app, [], "I don't want to drive", conversation_context=context))
+
+    assert captured == {
+        "tool_name": "fulfillment_options",
+        "args": {"product_id": "P001", "size": "M", "color": "black"},
+        "agent_name": "inventory_agent",
+    }
+    assert app.graph_calls == 0
+    assert app.scout_specialists["inventory_agent"].calls == 0
+
+
+def test_travel_avoidance_paraphrase_skips_nearby_and_chooses_delivery(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_category": "dresses",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+        "requested_size": "M",
+        "requested_color": "black",
+        "requested_store": "Maple Grove",
+        "requested_budget_max": 80,
+    }
+    captured = {}
+
+    async def fake_tool(tool_name, args, *, agent_name):
+        captured.update(tool_name=tool_name, args=args, agent_name=agent_name)
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+    monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Delivery verified."))
+
+    asyncio.run(supervisor.ask(app, [], "I'd rather not go to another store", conversation_context=context))
+
+    assert captured == {
+        "tool_name": "fulfillment_options",
+        "args": {"product_id": "P001", "size": "M", "color": "black"},
+        "agent_name": "inventory_agent",
+    }
+    assert app.graph_calls == 0
+    assert app.scout_specialists["inventory_agent"].calls == 0
+
+
+def test_any_way_to_get_it_chooses_single_delivery_check(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_category": "dresses",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+        "requested_size": "M",
+        "requested_color": "black",
+        "requested_budget_max": 80,
+    }
+    calls = []
+
+    async def fake_tool(tool_name, args, *, agent_name):
+        calls.append({"tool_name": tool_name, "args": args, "agent_name": agent_name})
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+    monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Delivery verified."))
+
+    asyncio.run(supervisor.ask(app, [], "Is there any way I can get it?", conversation_context=context))
+
+    assert calls == [
+        {
+            "tool_name": "fulfillment_options",
+            "args": {"product_id": "P001", "size": "M", "color": "black"},
+            "agent_name": "inventory_agent",
+        }
+    ]
+    assert app.graph_calls == 0
+    assert app.scout_specialists["inventory_agent"].calls == 0
+
+
+def test_any_way_to_get_it_with_known_store_chooses_pickup_check(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_category": "dresses",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+        "requested_size": "M",
+        "requested_color": "black",
+        "requested_store": "Maple Grove",
+        "requested_budget_max": 80,
+    }
+    calls = []
+
+    async def fake_tool(tool_name, args, *, agent_name):
+        calls.append({"tool_name": tool_name, "args": args, "agent_name": agent_name})
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+    monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Store verified."))
+
+    asyncio.run(supervisor.ask(app, [], "Is there any way I can get it?", conversation_context=context))
+
+    assert calls == [
+        {"tool_name": "stock", "args": {"product_id": "P001", "size": "M", "color": "black"}, "agent_name": "inventory_agent"},
+        {
+            "tool_name": "stores",
+            "args": {"product_id": "P001", "store_name": "Maple Grove", "size": "M", "color": "black"},
+            "agent_name": "inventory_agent",
+        },
+    ]
+    assert app.graph_calls == 0
+    assert app.scout_specialists["inventory_agent"].calls == 0
+
+
+def test_check_another_store_without_location_asks_for_location(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_category": "dresses",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+        "requested_size": "M",
+        "requested_color": "black",
+        "requested_budget_max": 80,
+    }
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    reply, _history, products = asyncio.run(
+        supervisor.ask(app, [], "Check another store", conversation_context=context)
+    )
+
+    assert reply == "Which store or ZIP code should I use to check nearby availability?"
+    assert products == []
+    assert app.graph_calls == 0
+    assert all(agent.calls == 0 for agent in app.scout_specialists.values())
+
+
+def test_location_paraphrases_without_location_ask_for_location(monkeypatch):
+    for message in ("Does another location have it?", "Do any other locations have it?"):
+        app = App()
+        context = {
+            "active_product_id": "P001",
+            "active_product_name": "Black Midi Dress",
+            "active_category": "dresses",
+            "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+            "requested_size": "M",
+            "requested_color": "black",
+            "requested_budget_max": 80,
+        }
+
+        monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+        reply, _history, products = asyncio.run(
+            supervisor.ask(app, [], message, conversation_context=context)
+        )
+
+        assert reply == "Which store or ZIP code should I use to check nearby availability?"
+        assert products == []
+        assert app.graph_calls == 0
+        assert all(agent.calls == 0 for agent in app.scout_specialists.values())
+
+
+def test_check_another_store_with_known_store_preserves_exact_variant(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_category": "dresses",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+        "requested_size": "M",
+        "requested_color": "black",
+        "requested_store": "Maple Grove",
+        "requested_budget_max": 80,
+    }
+    calls = []
+
+    async def fake_tool(tool_name, args, *, agent_name):
+        calls.append({"tool_name": tool_name, "args": args, "agent_name": agent_name})
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+    monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Store verified."))
+
+    asyncio.run(supervisor.ask(app, [], "Check another store", conversation_context=context))
+
+    assert calls == [
+        {"tool_name": "stock", "args": {"product_id": "P001", "size": "M", "color": "black"}, "agent_name": "inventory_agent"},
+        {
+            "tool_name": "stores",
+            "args": {"product_id": "P001", "store_name": "Maple Grove", "size": "M", "color": "black"},
+            "agent_name": "inventory_agent",
+        },
+    ]
+    assert app.graph_calls == 0
+    assert app.scout_specialists["inventory_agent"].calls == 0
+
+
+def test_find_similar_followup_preserves_category_variant_and_budget(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_category": "dresses",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+        "requested_size": "M",
+        "requested_color": "black",
+        "requested_budget_max": 80,
+    }
+    captured = {}
+
+    async def fake_tool(tool_name, args, *, agent_name):
+        captured.update(tool_name=tool_name, args=args, agent_name=agent_name)
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+    monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Similar products verified."))
+
+    asyncio.run(
+        supervisor.ask(
+            app,
+            [],
+            "Find similar products",
+            conversation_context=context,
+        )
+    )
+
+    assert captured == {
+        "tool_name": "alternatives",
+        "args": {
+            "product_id": "P001",
+            "limit": 3,
+            "size": "M",
+            "color": "black",
+            "max_price": 80.0,
+            "category": "dresses",
+        },
+        "agent_name": "recommend_agent",
+    }
+    assert app.graph_calls == 0
+    assert app.scout_specialists["recommend_agent"].calls == 0
+
+
+def test_show_me_something_similar_routes_to_alternatives(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_category": "dresses",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+        "requested_size": "M",
+        "requested_color": "black",
+        "requested_budget_max": 80,
+    }
+    captured = {}
+
+    async def fake_tool(tool_name, args, *, agent_name):
+        captured.update(tool_name=tool_name, args=args, agent_name=agent_name)
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+    monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Similar products verified."))
+
+    asyncio.run(supervisor.ask(app, [], "Show me something similar", conversation_context=context))
+
+    assert captured == {
+        "tool_name": "alternatives",
+        "args": {
+            "product_id": "P001",
+            "limit": 3,
+            "size": "M",
+            "color": "black",
+            "max_price": 80.0,
+            "category": "dresses",
+        },
+        "agent_name": "recommend_agent",
+    }
+    assert app.graph_calls == 0
+    assert app.scout_specialists["recommend_agent"].calls == 0
+
+
+def test_similar_product_paraphrases_route_to_alternatives(monkeypatch):
+    for message in ("Anything else like this?", "Are there other options like it?"):
+        app = App()
+        context = {
+            "active_product_id": "P001",
+            "active_product_name": "Black Midi Dress",
+            "active_category": "dresses",
+            "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+            "requested_size": "M",
+            "requested_color": "black",
+            "requested_budget_max": 80,
+        }
+        captured = {}
+
+        async def fake_tool(tool_name, args, *, agent_name):
+            captured.update(tool_name=tool_name, args=args, agent_name=agent_name)
+
+        monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+        monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+        monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Similar products verified."))
+
+        asyncio.run(supervisor.ask(app, [], message, conversation_context=context))
+
+        assert captured == {
+            "tool_name": "alternatives",
+            "args": {
+                "product_id": "P001",
+                "limit": 3,
+                "size": "M",
+                "color": "black",
+                "max_price": 80.0,
+                "category": "dresses",
+            },
+            "agent_name": "recommend_agent",
+        }
+        assert app.graph_calls == 0
+        assert app.scout_specialists["recommend_agent"].calls == 0
+
+
+def test_find_similar_black_medium_no_scout_results_returns_clear_message(monkeypatch):
+    app = App()
+    context = {
+        "active_product_id": "P001",
+        "active_product_name": "Black Midi Dress",
+        "active_category": "dresses",
+        "active_selected_products": [{"product_id": "P001", "name": "Black Midi Dress", "category": "dresses"}],
+        "requested_size": "M",
+        "requested_color": "black",
+        "requested_budget_max": 80,
+    }
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    reply, _history, products = asyncio.run(
+        supervisor.ask(
+            app,
+            [],
+            "Find similar products",
+            conversation_context=context,
+        )
+    )
+
+    assert reply == "I couldn’t find a Scout alternative to Black Midi Dress matching black, size M, under $80."
+    assert products == []
+    assert app.graph_calls == 0
+    assert app.scout_specialists["recommend_agent"].calls == 0
 
 
 def test_tool_first_retains_color_constraint(monkeypatch):
@@ -200,6 +803,19 @@ def test_rejected_product_claims_do_not_enter_context():
     assert context["active_selected_products"] == []
 
 
+def test_verified_order_claim_becomes_active_order_context():
+    context = {}
+    order_status = claim(ClaimType.ORDER_STATUS.value, "O1001", "status", "shipped", "c_order")
+
+    supervisor._update_context_from_verified_turn(
+        context,
+        finalized=finalized(claims=[order_status]),
+        structured_intent=StructuredIntent(text="Where is O1001?", request_type="order_status", confidence=0.9),
+    )
+
+    assert context["active_order_id"] == "O1001"
+
+
 def test_sessions_remain_isolated(monkeypatch):
     first = {}
     second = {}
@@ -213,6 +829,69 @@ def test_sessions_remain_isolated(monkeypatch):
 
     assert first["active_product_id"] == "P001"
     assert second == {}
+
+
+def test_order_return_followup_uses_active_order_id(monkeypatch):
+    app = App()
+    context = {"active_order_id": "O1001"}
+    captured = {}
+
+    async def fake_tool(tool_name, args, *, agent_name):
+        captured.update(tool_name=tool_name, args=args, agent_name=agent_name)
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+    monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Return verified."))
+
+    reply, _history, products = asyncio.run(supervisor.ask(app, [], "Can I return it?", conversation_context=context))
+
+    assert reply == "Return verified."
+    assert products == []
+    assert app.graph_calls == 0
+    assert app.scout_specialists["order_agent"].calls == 0
+    assert captured == {
+        "tool_name": "return_eligibility",
+        "args": {"order_id": "O1001"},
+        "agent_name": "order_agent",
+    }
+
+
+def test_order_arrival_followup_uses_active_order_id(monkeypatch):
+    app = App()
+    context = {"active_order_id": "O1001"}
+    captured = {}
+
+    async def fake_tool(tool_name, args, *, agent_name):
+        captured.update(tool_name=tool_name, args=args, agent_name=agent_name)
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+    monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Order verified."))
+
+    asyncio.run(supervisor.ask(app, [], "When will it arrive?", conversation_context=context))
+
+    assert app.graph_calls == 0
+    assert app.scout_specialists["order_agent"].calls == 0
+    assert captured == {"tool_name": "orders", "args": {"order_id": "O1001"}, "agent_name": "order_agent"}
+
+
+def test_order_items_followup_uses_active_order_id(monkeypatch):
+    app = App()
+    context = {"active_order_id": "O1001"}
+    captured = {}
+
+    async def fake_tool(tool_name, args, *, agent_name):
+        captured.update(tool_name=tool_name, args=args, agent_name=agent_name)
+
+    monkeypatch.setattr(supervisor, "get_chat_model", lambda: object())
+    monkeypatch.setattr(supervisor, "_execute_read_only_tool", fake_tool)
+    monkeypatch.setattr(supervisor, "_finalize_verified_response", lambda **kwargs: finalized(reply="Items verified."))
+
+    asyncio.run(supervisor.ask(app, [], "What did I order?", conversation_context=context))
+
+    assert app.graph_calls == 0
+    assert app.scout_specialists["order_agent"].calls == 0
+    assert captured == {"tool_name": "orders", "args": {"order_id": "O1001"}, "agent_name": "order_agent"}
 
 
 def test_broad_shoe_request_returns_deterministic_clarification(monkeypatch):

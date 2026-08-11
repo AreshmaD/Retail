@@ -94,7 +94,10 @@ def test_color_specific_unavailable_inventory_renders_from_approved_claims():
         customer_message="Is the black midi dress in a medium?",
     )
 
-    assert reply == "The Black Midi Dress is out of stock in black, size M."
+    assert reply == (
+        "The Black Midi Dress is out of stock in black, size M. "
+        "I can check nearby stores, check online or delivery availability, or find similar products."
+    )
     assert products == []
     assert "P001" not in reply
 
@@ -133,9 +136,75 @@ def test_variant_unavailable_overrides_general_store_inventory_wording():
         customer_message="Is it available at Maple Grove?",
     )
 
-    assert reply == "Maple Grove has other inventory for that item, but the black, size M option is currently out of stock."
+    assert reply == (
+        "Maple Grove has other inventory for that item, but the black, size M option is currently out of stock. "
+        "I can check nearby stores, check online or delivery availability, or find similar products."
+    )
     assert products == []
     assert "P001" not in reply
+
+
+def test_nearby_store_variant_unavailable_renders_not_found_nearby():
+    claims = [
+        claim(ClaimType.PRODUCT_IDENTITY, claim_id="cl_name", subject_id="P001", field="name", value="Black Midi Dress", source_agent="inventory_agent"),
+        claim(ClaimType.INVENTORY_AVAILABILITY, claim_id="cl_variant", subject_id="product:P001:size:M:color:black", field="in_stock", value=False, source_agent="inventory_agent"),
+        claim(ClaimType.INVENTORY_QUANTITY, claim_id="cl_qty", subject_id="product:P001:size:M:color:black", field="quantity", value=0, source_agent="inventory_agent"),
+    ]
+
+    reply, products = render_verified_response(
+        original_reply="Black Midi Dress is in stock.",
+        products=[],
+        proposed_claims=claims,
+        verification_result=result(["cl_name", "cl_variant", "cl_qty"]),
+        customer_message="Check nearby stores for Black Midi Dress in black, size M",
+    )
+
+    assert reply == (
+        "Black Midi Dress in black, size M is not available in nearby store inventory. "
+        "I can check nearby stores, check online or delivery availability, or find similar products."
+    )
+    assert products == []
+    assert "P001" not in reply
+
+
+def test_online_delivery_variant_unavailable_renders_delivery_specific_reply():
+    claims = [
+        claim(ClaimType.PRODUCT_IDENTITY, claim_id="cl_name", subject_id="P001", field="name", value="Black Midi Dress", source_agent="inventory_agent"),
+        claim(ClaimType.DELIVERY_AVAILABILITY, claim_id="cl_delivery", subject_id="product:P001:size:M:color:black", field="delivery_available", value=False, source_agent="inventory_agent"),
+        claim(ClaimType.INVENTORY_QUANTITY, claim_id="cl_qty", subject_id="product:P001:size:M:color:black", field="quantity", value=0, source_agent="inventory_agent"),
+    ]
+
+    reply, products = render_verified_response(
+        original_reply="Black Midi Dress is available online.",
+        products=[],
+        proposed_claims=claims,
+        verification_result=result(["cl_name", "cl_delivery", "cl_qty"]),
+        customer_message="Check online or delivery availability for Black Midi Dress in black, size M",
+    )
+
+    assert reply == (
+        "The Black Midi Dress in black, size M is unavailable for online or delivery fulfillment. "
+        "I can find similar products."
+    )
+    assert products == []
+
+
+def test_online_delivery_variant_available_renders_delivery_specific_reply():
+    claims = [
+        claim(ClaimType.PRODUCT_IDENTITY, claim_id="cl_name", subject_id="P001", field="name", value="Black Midi Dress", source_agent="inventory_agent"),
+        claim(ClaimType.DELIVERY_AVAILABILITY, claim_id="cl_delivery", subject_id="product:P001:size:S:color:black", field="delivery_available", value=True, source_agent="inventory_agent"),
+        claim(ClaimType.INVENTORY_QUANTITY, claim_id="cl_qty", subject_id="product:P001:size:S:color:black", field="quantity", value=3, source_agent="inventory_agent"),
+    ]
+
+    reply, _products = render_verified_response(
+        original_reply="Black Midi Dress is available online.",
+        products=[],
+        proposed_claims=claims,
+        verification_result=result(["cl_name", "cl_delivery", "cl_qty"]),
+        customer_message="Check online or delivery availability for Black Midi Dress in black, size S",
+    )
+
+    assert reply == "The Black Midi Dress in black, size S is available for delivery, with 3 units available."
 
 
 def test_exact_store_variant_available_renders_narrow_store_variant_fact():
@@ -361,7 +430,10 @@ def test_size_availability_renders_request_specific_available_and_unavailable():
         customer_message="Is the black midi dress in a medium?",
     )
 
-    assert reply == "The Black Midi Dress is out of stock in size M."
+    assert reply == (
+        "The Black Midi Dress is out of stock in size M. "
+        "I can check nearby stores, check online or delivery availability, or find similar products."
+    )
 
 
 def test_store_availability_renders_request_specific_answer_without_price_replacement():
