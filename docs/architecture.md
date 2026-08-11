@@ -23,7 +23,18 @@ No LLM or agent tool can mutate checkout/payment/order state.
 
 ## Agent Topology
 
-`backend/src/scout/agents/supervisor.py` builds the Supervisor with five specialists from `backend/src/scout/agents/specialists.py`. Each specialist is created through the local `create_specialist_agent()` helper, which wraps LangChain `create_agent` while preserving the current prompts and code-selected tool allowlists:
+`backend/src/scout/agents/supervisor.py` builds the Supervisor with five specialists from `backend/src/scout/agents/specialists.py`. Each specialist is created through the local `create_specialist_agent()` helper, which wraps LangChain `create_agent` while preserving the current prompts and code-selected tool allowlists.
+
+`supervisor.py` itself is now a thin entry point (~640 lines, down from ~3,360) — most of the actual orchestration logic lives in focused submodules under `agents/`:
+
+- `agents/context/` — conversation memory (product/order/follow-up resolution across turns)
+- `agents/routing/` — deterministic specialist selection and out-of-stock recovery routing
+- `agents/execution/` — deterministic tool-first execution and model/provider runtime handling
+- `agents/verification_flow/` — evidence-completion checks, targeted correction, and finalization
+- `agents/orchestration/` — the LangGraph/Supervisor graph factory, turn execution, and multi-intent sequencing
+- `agents/comparison.py` — product comparison ranking and rendering
+
+Specialist tool allowlists themselves:
 
 | Specialist | Current tools | Boundary |
 |---|---|---|
