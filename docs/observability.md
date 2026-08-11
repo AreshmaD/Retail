@@ -36,7 +36,11 @@ When regenerated locally, `backend/tests/eval/results/scout-demo-v1/diagnostics_
 - model calls avoided
 - slowest stages
 
-## Current Release Metrics
+## Release Metrics
+
+**Snapshot from July 30, before this week's agent-layer refactor and
+the ACCESS_DENIED fix — re-run the eval suite and regenerate
+`diagnostics_summary.json` for current numbers.**
 
 - Total model calls: 16
 - Total tool calls: 42
