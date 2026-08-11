@@ -11,7 +11,7 @@ The guiding rule is simple: **anything that can cost money or trust stays determ
 - **Evidence-backed output:** tool calls produce structured evidence; proposed claims are verified before customer-visible factual replies and product cards are rebuilt from approved claims.
 - **Safe commerce boundary:** no checkout, payment, refund, cancellation, SQL, shell, or unrestricted HTTP tool is exposed to specialists. Checkout remains a deterministic REST route.
 - **Local demo mode:** `ENABLE_STRIPE_MCP=false MODEL_PROVIDER=ollama` starts the app without Stripe MCP discovery while preserving deterministic Stripe REST checkout code.
-- **Validated baseline:** 323 deterministic backend tests pass, frontend lint/build pass, and the polished demo flows cover recommendations, inventory, orders, policy, external offers, payment boundaries, and out-of-scope handling.
+- **Validated baseline:** 411 deterministic backend tests pass, frontend lint/build pass, and the polished demo flows cover recommendations, inventory, orders, policy, external offers, payment boundaries, and out-of-scope handling.
 
 ## Architecture At A Glance
 
@@ -165,12 +165,9 @@ See [`docs/demo-script.md`](docs/demo-script.md) for the full talk track.
 
 ## Known Limits
 
-- No production auth, RBAC, rate limiting, human escalation, carrier integration, or warehouse integration.
+- Order lookups fail closed without an authenticated customer context (see `docs/security.md`), and a local-only demo sign-in supports testing this — but there is no production-grade RBAC, rate limiting, human escalation, carrier integration, or warehouse integration.
 - Chat session history is in-memory; frontend cart/saved state is browser `localStorage`.
 - Ollama latency depends heavily on local hardware; release eval should run in isolation.
 - The verifier covers explicit Scout-domain claim types; it is not a formal proof system or broad semantic entailment engine.
 - External-offer images are allowlisted/seeded demo URLs; retailer CDNs can still be brittle outside the app's control.
 
-## License
-
-Portfolio/demo project. Add a license before distributing beyond portfolio review.
