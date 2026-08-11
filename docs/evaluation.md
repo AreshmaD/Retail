@@ -17,7 +17,9 @@ npm run build
 
 Current release validation:
 
-- Backend pytest: 323 passed
+- Backend pytest: 411 passed (up from 323 — see the agent-layer
+  modularization, ACCESS_DENIED, and dead-code-cleanup commits for
+  what added the additional coverage)
 - Frontend lint: 0 errors, 0 warnings
 - Frontend build: passed
 
@@ -39,6 +41,11 @@ Phase 9 added five dependent multi-intent validation cases for Supervisor coordi
 - `MI-05`: internal insufficiency then third-party fallback with policy limitation
 
 ## Scout Demo v1 Release Result
+
+**The numbers below are a dated snapshot (July 30), predating this
+week's agent-layer refactor, the store-availability and order-
+authorization fixes, and the ACCESS_DENIED claim type. Re-run
+`run_eval.py` and regenerate these artifacts for current numbers.**
 
 Run-specific artifacts can be regenerated locally under `backend/tests/eval/results/scout-demo-v1/`:
 
