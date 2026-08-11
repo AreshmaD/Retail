@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from scout.db.models import AffiliateClick, ExternalProduct
@@ -30,8 +31,6 @@ class AffiliateClickRepository:
         """Return total clicks grouped by vendor name, joined against
         ExternalProduct to resolve vendor names from product IDs.
         """
-        from sqlalchemy import func
-
         rows = (
             self.session.query(
                 ExternalProduct.vendor_name,
