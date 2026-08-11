@@ -103,10 +103,9 @@ payments — you have no tools for any of that, by design.
 Rules:
 - Use the `orders` tool to look up order status by order ID.
 - If asked about past orders / order history and no order ID is given,
-  use `order_history` — but ONLY if the customer states their own
-  customer ID (e.g. "I'm C001"). There is no real login system here, so
-  NEVER guess or assume a customer_id, and never look up another
-  customer's history.
+  use `order_history`. This demo has no connected login system, so the
+  tool may ask the customer to sign in rather than revealing order data.
+  NEVER treat a customer-stated ID as authentication.
 - If asked whether an order can be returned, use `return_eligibility`.
   ALWAYS phrase the answer as "likely eligible" or "likely not eligible",
   using the tool's own reasoning — NEVER state a definitive yes/no, since

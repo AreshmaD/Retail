@@ -257,18 +257,43 @@ def _add_evidence_claims(builder: _ClaimBuilder, entry: EvidenceEntry) -> None:
 
         if facts.get("store_id") and facts.get("store_name") is not None:
             builder.add(claim_type=ClaimType.STORE_IDENTITY, subject_id=facts["store_id"], field="store_name", value=facts["store_name"], evidence_ids=evidence_ids, source_agent=agent)
+        elif facts.get("requested_store_name") and not facts.get("store_id"):
+            # No real store row exists (the requested store had zero
+            # matching inventory) — but the customer's own requested
+            # store name is real, verified data (it came from their own
+            # tool call args, not invented), so it's safe to claim and
+            # show in the reply. Uses inventory_subject_id so this
+            # claim groups with the same record's quantity/in_stock
+            # claims in rendering.py, producing one coherent, store-
+            # specific sentence instead of a generic fallback that
+            # never mentions which store was actually checked.
+            builder.add(claim_type=ClaimType.STORE_IDENTITY, subject_id=inventory_subject_id, field="store_name", value=facts["requested_store_name"], evidence_ids=evidence_ids, source_agent=agent)
         if facts.get("distance_miles") is not None:
             builder.add(claim_type=ClaimType.STORE_DISTANCE, subject_id=facts.get("store_id") or subject_id, field="distance_miles", value=facts["distance_miles"], evidence_ids=evidence_ids, source_agent=agent)
         if facts.get("pickup_available") is not None:
             builder.add(claim_type=ClaimType.PICKUP_AVAILABILITY, subject_id=subject_id, field="pickup_available", value=bool(facts["pickup_available"]), evidence_ids=evidence_ids, source_agent=agent)
         if facts.get("delivery_available") is not None:
-            builder.add(claim_type=ClaimType.DELIVERY_AVAILABILITY, subject_id=subject_id, field="delivery_available", value=bool(facts["delivery_available"]), evidence_ids=evidence_ids, source_agent=agent)
+            builder.add(claim_type=ClaimType.DELIVERY_AVAILABILITY, subject_id=inventory_subject_id or subject_id, field="delivery_available", value=bool(facts["delivery_available"]), evidence_ids=evidence_ids, source_agent=agent)
         for estimate_key in ("pickup_estimate", "delivery_estimate"):
             if facts.get(estimate_key) is not None:
-                builder.add(claim_type=ClaimType.FULFILLMENT_ESTIMATE, subject_id=subject_id, field=estimate_key, value=facts[estimate_key], evidence_ids=evidence_ids, source_agent=agent)
+                builder.add(claim_type=ClaimType.FULFILLMENT_ESTIMATE, subject_id=inventory_subject_id or subject_id, field=estimate_key, value=facts[estimate_key], evidence_ids=evidence_ids, source_agent=agent)
 
         if facts.get("order_id") and facts.get("status") is not None:
             builder.add(claim_type=ClaimType.ORDER_STATUS, subject_id=facts["order_id"], field="status", value=facts["status"], evidence_ids=evidence_ids, source_agent=agent)
+        elif facts.get("order_id") and facts.get("found") is False and facts.get("message") is not None:
+            # Genuine authorization-denial case (e.g. orders() returning
+            # found=False, authorized=False, with a safe, tool-provided
+            # message like "Sign in to view order details.") — this is
+            # NOT the customer's actual order data, it's a real,
+            # deliberate denial message the tool itself already decided
+            # is safe to show. Uses ORDER_STATUS (not POLICY_STATEMENT,
+            # which is domain-restricted to policy_agent only — see
+            # DOMAIN_AGENTS in verification.py) with the tool's own
+            # message as the "status" value, since order_agent is
+            # already an authorized source for ORDER_STATUS claims.
+            # Does NOT reveal any order data - only the tool's own
+            # pre-approved denial message.
+            builder.add(claim_type=ClaimType.ORDER_STATUS, subject_id=facts["order_id"], field="status", value=facts["message"], evidence_ids=evidence_ids, source_agent=agent)
         if facts.get("tracking_number") is not None:
             builder.add(claim_type=ClaimType.ORDER_TRACKING, subject_id=subject_id, field="tracking_number", value=facts["tracking_number"], evidence_ids=evidence_ids, source_agent=agent)
         if facts.get("payment_status") is not None:
@@ -406,16 +431,23 @@ def _inventory_subject_id_from_facts(facts: dict[str, Any]) -> str | None:
     product_id = facts.get("product_id")
     if not isinstance(product_id, str) or not product_id.strip():
         return None
-    store_id = facts.get("store_id")
-    if isinstance(store_id, str) and store_id.strip():
-        return f"product:{product_id}:store:{store_id}"
     size = facts.get("size")
+    color = facts.get("color")
+    store_id = facts.get("store_id")
     if isinstance(size, str) and size.strip():
-        color = facts.get("color")
         subject = f"product:{product_id}:size:{size.upper()}"
         if isinstance(color, str) and color.strip():
             subject += f":color:{color.strip().lower()}"
+        if isinstance(store_id, str) and store_id.strip():
+            subject += f":store:{store_id}"
         return subject
+    if isinstance(color, str) and color.strip():
+        subject = f"product:{product_id}:color:{color.strip().lower()}"
+        if isinstance(store_id, str) and store_id.strip():
+            subject += f":store:{store_id}"
+        return subject
+    if isinstance(store_id, str) and store_id.strip():
+        return f"product:{product_id}:store:{store_id}"
     return product_id
 
 

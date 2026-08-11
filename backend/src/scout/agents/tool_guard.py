@@ -22,6 +22,7 @@ _inventory_argument_constraints: contextvars.ContextVar = contextvars.ContextVar
 ARGUMENT_NORMALIZATION_ALLOWLIST = {
     "stock": {"product_id"},
     "stores": {"product_id"},
+    "fulfillment_options": {"product_id"},
 }
 
 SAFE_TOOL_ARGUMENT_FAILURE = (
@@ -96,7 +97,7 @@ def normalize_tool_arguments(*, tool_name: str, arguments: dict) -> dict:
 
 
 def _enrich_inventory_tool_arguments(*, tool_name: str, arguments: dict) -> dict:
-    if tool_name not in {"stock", "stores"}:
+    if tool_name not in {"stock", "stores", "fulfillment_options"}:
         return arguments
 
     constraints = _inventory_argument_constraints.get()
@@ -116,9 +117,6 @@ def _enrich_inventory_tool_arguments(*, tool_name: str, arguments: dict) -> dict
             enriched["product_id"] = product_constraint.strip()
         else:
             raise ToolArgumentNormalizationError(f"{tool_name}.product_id must be a string")
-
-    if tool_name == "stores":
-        return enriched
 
     for field, normalizer in (
         ("size", _normalize_inventory_size),

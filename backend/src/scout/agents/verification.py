@@ -323,7 +323,18 @@ def _candidate_values(claim: ProposedClaim, facts: dict[str, Any]) -> list[Any]:
             values.append(quantity > 0)
         return values
     if claim.claim_type == ClaimType.STORE_IDENTITY.value:
-        return [facts["store_name"]] if "store_name" in facts else []
+        # A real store row uses "store_name"; the "requested store had
+        # no matching inventory" case (see claims.py's STORE_IDENTITY
+        # fallback branch) has no real store row at all, only the
+        # customer's own requested_store_name at the top level of
+        # facts — both are legitimate, verified sources for this
+        # claim type, so both are accepted as candidate values.
+        values = []
+        if "store_name" in facts:
+            values.append(facts["store_name"])
+        if "requested_store_name" in facts:
+            values.append(facts["requested_store_name"])
+        return values
     if claim.claim_type == ClaimType.STORE_DISTANCE.value:
         return [facts["distance_miles"]] if "distance_miles" in facts else []
     if claim.claim_type == ClaimType.PICKUP_AVAILABILITY.value:
@@ -407,7 +418,18 @@ def _values_match(claim: ProposedClaim, evidence_value: Any) -> bool:
     }:
         return isinstance(claim.value, bool) and claim.value is evidence_value
     if claim.claim_type == ClaimType.ORDER_STATUS.value:
-        return _canonical_status(claim.value) is not None and _canonical_status(claim.value) == _canonical_status(evidence_value)
+        # Two legitimate shapes for this claim type: (1) a real status
+        # keyword (pending/shipped/delivered/etc.), matched via
+        # _canonical_status; (2) an authorization-denial message (e.g.
+        # "Sign in to view order details.") — not a status word at all,
+        # but a genuine, tool-provided message that should match
+        # via exact string equality against its own source evidence,
+        # since it is not being interpreted, only passed through
+        # verbatim from a trusted tool result.
+        canonical_claim = _canonical_status(claim.value)
+        if canonical_claim is not None:
+            return canonical_claim == _canonical_status(evidence_value)
+        return _normalize_string(claim.value) == _normalize_string(evidence_value)
     return _normalize_string(claim.value) == _normalize_string(evidence_value)
 
 

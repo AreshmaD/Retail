@@ -373,6 +373,10 @@ def detect_supported_compound_intent(message: str) -> ExecutionPlan | None:
     )
     has_order_status = bool(order_id and _contains_any(normalized, {"where", "status", "track", "tracking", "order"}))
     has_return_eligibility = bool(order_id and _contains_any(normalized, {"eligible", "eligibility", "return"}))
+    wants_order_policy_explanation = bool(
+        has_return_eligibility
+        and _contains_any(normalized, {"why", "explain", "because", "reason", "policy", "rule", "rules"})
+    )
 
     subgoals: list[PlannedSubIntent] = []
 
@@ -393,6 +397,15 @@ def detect_supported_compound_intent(message: str) -> ExecutionPlan | None:
                 depends_on=["order_status"],
             )
         )
+        if wants_order_policy_explanation:
+            subgoals.append(
+                PlannedSubIntent(
+                    intent="policy_question",
+                    specialist="policy_agent",
+                    text="Explain the Scout return policy rule for order return eligibility.",
+                    depends_on=["return_eligibility"],
+                )
+            )
         return ExecutionPlan(
             multi_intent=True,
             subgoals=subgoals,

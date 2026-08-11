@@ -6,17 +6,10 @@ from typing import Any
 
 from scout.agents.diagnostics import get_diagnostics
 from scout.agents.evidence import EvidenceEntry
+from scout.agents.orchestration.constants import HANDOFF_MARKERS, SPECIALIST_NAMES
 
 
 PRODUCT_TOOL_NAMES = {"search", "alternatives", "search_external_offers", "recommend_products"}
-SPECIALIST_NAMES = {
-    "recommend_agent",
-    "inventory_agent",
-    "order_agent",
-    "external_offer_agent",
-    "policy_agent",
-}
-HANDOFF_MARKERS = {"Transferring back to supervisor"}
 PRODUCT_FIELDS = {
     "product_id",
     "external_product_id",

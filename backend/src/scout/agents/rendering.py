@@ -475,14 +475,41 @@ def _inventory_sentences(claims: list[ProposedClaim], customer_message: str = ""
                 )
                 continue
         if variant_context and record["product_id"]:
+            if _is_online_delivery_request(customer_message) and record["delivery"] is not None:
+                if record["delivery"]:
+                    sentence = f"{product_label} in {variant_context} is available for delivery."
+                    if record["quantity"] is not None:
+                        sentence = f"{product_label} in {variant_context} is available for delivery, with {record['quantity']} units available."
+                else:
+                    sentence = (
+                        f"{product_label} in {variant_context} is unavailable for online or delivery fulfillment. "
+                        "I can find similar products."
+                    )
+                sentences.append(sentence)
+                continue
             if record["quantity"] is not None:
                 if record["quantity"] > 0:
                     sentences.append(f"{product_label} has {record['quantity']} units available in {variant_context}.")
+                elif _is_nearby_store_request(customer_message):
+                    sentences.append(
+                        f"{_neutral_product_reference(record['product_name'])} in {variant_context} is not available in nearby store inventory. "
+                        f"{_variant_unavailable_next_actions_sentence()}"
+                    )
                 else:
-                    sentences.append(f"{product_label} is out of stock in {variant_context}.")
+                    sentences.append(f"{product_label} is out of stock in {variant_context}. {_variant_unavailable_next_actions_sentence()}")
                 continue
             if record["in_stock"] is not None:
-                sentences.append(f"{product_label} is {'available' if record['in_stock'] else 'out of stock'} in {variant_context}.")
+                stock_text = "available" if record["in_stock"] else "out of stock"
+                sentence = f"{product_label} is {stock_text} in {variant_context}."
+                if record["in_stock"] is False:
+                    if _is_nearby_store_request(customer_message):
+                        sentence = (
+                            f"{_neutral_product_reference(record['product_name'])} in {variant_context} is not available in nearby store inventory. "
+                            f"{_variant_unavailable_next_actions_sentence()}"
+                        )
+                    else:
+                        sentence = f"{sentence} {_variant_unavailable_next_actions_sentence()}"
+                sentences.append(sentence)
                 continue
         if record["raw_store_name"] is not None:
             sentences.append(f"{record['raw_store_name']} is a verified store.")
@@ -539,7 +566,14 @@ def _combined_store_availability_sentence(records: list[dict]) -> str | None:
 
 def _store_has_general_inventory_but_variant_unavailable_sentence(variant: dict, store: dict) -> str:
     variant_text = _variant_context(variant["size"], variant["color"])
-    return f"{store['store_name']} has other inventory for that item, but the {variant_text} option is currently out of stock."
+    return (
+        f"{store['store_name']} has other inventory for that item, but the {variant_text} option is currently out of stock. "
+        f"{_variant_unavailable_next_actions_sentence()}"
+    )
+
+
+def _variant_unavailable_next_actions_sentence() -> str:
+    return "I can check nearby stores, check online or delivery availability, or find similar products."
 
 
 def _product_label(product_name: str | None) -> str:
@@ -565,6 +599,16 @@ def _is_inventory_request(customer_message: str) -> bool:
     return any(term in message for term in ("available", "availability", "stock", "in stock", "size", "pickup", "store"))
 
 
+def _is_nearby_store_request(customer_message: str) -> bool:
+    message = (customer_message or "").lower()
+    return "nearby" in message and ("store" in message or "stores" in message)
+
+
+def _is_online_delivery_request(customer_message: str) -> bool:
+    message = (customer_message or "").lower()
+    return any(term in message for term in ("online", "delivery", "shipping", "ship"))
+
+
 def _display_size(size: str | None) -> str | None:
     if not size:
         return None
@@ -580,7 +624,7 @@ def _product_names_by_id(claims: list[ProposedClaim]) -> dict[str, str]:
 
 
 def _context_product_names_by_id(customer_message: str) -> dict[str, str]:
-    if not re.match(r"\s*Check\s+(?:stock|pickup availability)\s+for\s+product_id\b", customer_message or "", re.IGNORECASE):
+    if not re.match(r"\s*Check\s+(?:stock|pickup availability|online or delivery availability|delivery availability)\s+for\s+product_id\b", customer_message or "", re.IGNORECASE):
         return {}
     return {
         match.group(1): match.group(2).strip()
@@ -633,10 +677,12 @@ def _policy_sentences(claims: list[ProposedClaim]) -> list[str]:
     sentences = []
     by_subject = _claims_by_subject(claims)
     for _, subject_claims in by_subject.items():
-        if _has_conflict(subject_claims):
-            continue
-        statement = _claim_value(subject_claims, ClaimType.POLICY_STATEMENT, "statement")
-        if statement is not None:
+        statement_claims = [
+            claim
+            for claim in subject_claims
+            if claim.claim_type == ClaimType.POLICY_STATEMENT.value and claim.field == "statement"
+        ]
+        for statement in _unique_by_key([claim.value for claim in statement_claims]):
             sentences.append(_customer_policy_statement(str(statement)))
     return sentences
 
