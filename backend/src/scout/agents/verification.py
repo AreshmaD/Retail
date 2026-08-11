@@ -55,6 +55,7 @@ SUPPORTED_FIELDS = {
     ClaimType.EXTERNAL_OFFER_USE_CASE.value: {"use_case"},
     ClaimType.EXTERNAL_OFFER_ATTRIBUTE.value: {"attribute", "waterproof"},
     ClaimType.EXTERNAL_OFFER_AVAILABILITY.value: {"availability"},
+    ClaimType.ACCESS_DENIED.value: {"message"},
 }
 
 DOMAIN_AGENTS = {
@@ -80,6 +81,7 @@ DOMAIN_AGENTS = {
     ClaimType.EXTERNAL_OFFER_USE_CASE.value: {"external_offer_agent"},
     ClaimType.EXTERNAL_OFFER_ATTRIBUTE.value: {"external_offer_agent"},
     ClaimType.EXTERNAL_OFFER_AVAILABILITY.value: {"external_offer_agent"},
+    ClaimType.ACCESS_DENIED.value: {"order_agent", "inventory_agent", "recommend_agent", "policy_agent", "external_offer_agent"},
 }
 
 STATUS_CANONICAL = {
@@ -377,6 +379,8 @@ def _candidate_values(claim: ProposedClaim, facts: dict[str, Any]) -> list[Any]:
         return facts.get("attributes", []) if isinstance(facts.get("attributes"), list) else []
     if claim.claim_type == ClaimType.EXTERNAL_OFFER_AVAILABILITY.value:
         return [facts["availability"]] if facts.get("external_product_id") and "availability" in facts else []
+    if claim.claim_type == ClaimType.ACCESS_DENIED.value:
+        return [facts["message"]] if facts.get("found") is False and "message" in facts else []
     return []
 
 
@@ -418,17 +422,16 @@ def _values_match(claim: ProposedClaim, evidence_value: Any) -> bool:
     }:
         return isinstance(claim.value, bool) and claim.value is evidence_value
     if claim.claim_type == ClaimType.ORDER_STATUS.value:
-        # Two legitimate shapes for this claim type: (1) a real status
-        # keyword (pending/shipped/delivered/etc.), matched via
-        # _canonical_status; (2) an authorization-denial message (e.g.
-        # "Sign in to view order details.") — not a status word at all,
-        # but a genuine, tool-provided message that should match
-        # via exact string equality against its own source evidence,
-        # since it is not being interpreted, only passed through
-        # verbatim from a trusted tool result.
-        canonical_claim = _canonical_status(claim.value)
-        if canonical_claim is not None:
-            return canonical_claim == _canonical_status(evidence_value)
+        return _canonical_status(claim.value) is not None and _canonical_status(claim.value) == _canonical_status(evidence_value)
+    if claim.claim_type == ClaimType.ACCESS_DENIED.value:
+        # Exact-string match only, deliberately — this is a real,
+        # tool-provided denial message (e.g. "Sign in to view order
+        # details."), never interpreted or categorized, only passed
+        # through verbatim against its own source evidence. No
+        # canonical vocabulary involved, unlike ORDER_STATUS above —
+        # this claim type exists specifically because reusing
+        # ORDER_STATUS/POLICY_STATEMENT for this shape caused real,
+        # distinct matching-logic failures during live debugging.
         return _normalize_string(claim.value) == _normalize_string(evidence_value)
     return _normalize_string(claim.value) == _normalize_string(evidence_value)
 
