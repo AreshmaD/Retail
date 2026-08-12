@@ -5,6 +5,7 @@ from langchain_core.documents import Document
 from langchain_ollama import OllamaEmbeddings
 
 from scout.agents.diagnostics import timed_stage
+from scout.config import settings
 from scout.db.session import SessionLocal
 from scout.db.models import Product
 
@@ -27,7 +28,10 @@ class _TimedEmbeddings:
 
 
 def _get_embeddings() -> OllamaEmbeddings:
-    return _TimedEmbeddings(OllamaEmbeddings(model=EMBEDDING_MODEL))
+    # See vector_store.py's identical fix for the full explanation -
+    # base_url must be passed explicitly, or this always defaults to
+    # localhost regardless of OLLAMA_BASE_URL.
+    return _TimedEmbeddings(OllamaEmbeddings(model=EMBEDDING_MODEL, base_url=settings.OLLAMA_BASE_URL))
 
 
 def _product_to_document(product: Product) -> Document:

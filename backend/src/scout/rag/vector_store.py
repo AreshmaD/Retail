@@ -6,6 +6,7 @@ from langchain_ollama import OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from scout.agents.diagnostics import timed_stage
+from scout.config import settings
 
 POLICY_DOCS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "policies"
 PERSIST_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "chroma"
@@ -27,7 +28,14 @@ class _TimedEmbeddings:
 
 
 def _get_embeddings() -> OllamaEmbeddings:
-    return _TimedEmbeddings(OllamaEmbeddings(model=EMBEDDING_MODEL))
+    # base_url must be passed explicitly - OllamaEmbeddings defaults to
+    # localhost:11434 regardless of the OLLAMA_BASE_URL environment
+    # variable, which config.py DOES correctly read but this function
+    # was never actually using. Confirmed via a real Docker deployment:
+    # settings.OLLAMA_BASE_URL was correctly set to the ollama service's
+    # container-network address, but requests still failed trying to
+    # reach localhost - a genuine, real bug, not a config problem.
+    return _TimedEmbeddings(OllamaEmbeddings(model=EMBEDDING_MODEL, base_url=settings.OLLAMA_BASE_URL))
 
 
 def _load_policy_documents() -> list[Document]:
